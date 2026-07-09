@@ -2082,6 +2082,170 @@ input[type='datetime-local'] {
   min-width: 180px;
 }
 
+/* ---------- 今日のあなた（/punch）: 打刻ごとのカード区切り ---------- */
+.today-card {
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  padding: 10px 12px 6px;
+  margin-bottom: 10px;
+  background: #fdfcfa;
+}
+
+.today-head {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-2);
+  padding-bottom: 6px;
+  margin-bottom: 4px;
+  border-bottom: 1px dashed var(--line-2);
+}
+
+.more-today {
+  width: 100%;
+}
+
+/* 段落の読みやすさ（全体） */
+.note {
+  line-height: 1.75;
+  overflow-wrap: break-word;
+}
+
+/* ============ スマホ（〜480px）: テーブル → カード化 ============ */
+@media (max-width: 480px) {
+  .wrap {
+    padding: 18px 12px 48px;
+  }
+
+  /* タッチターゲットは最低44px */
+  .btn,
+  .btn.sm,
+  .tab {
+    min-height: 44px;
+  }
+
+  /* テーブルをカードの集まりに変える（.m-cards） */
+  .m-cards thead {
+    display: none;
+  }
+
+  .m-cards,
+  .m-cards tbody {
+    display: block;
+    width: 100%;
+  }
+
+  .m-cards tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px 14px;
+    padding: 12px 4px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .m-cards tr:last-child {
+    border-bottom: none;
+  }
+
+  .m-cards td {
+    display: block;
+    border: none;
+    padding: 0;
+  }
+
+  .m-cards td[colspan] {
+    flex: 1 1 100%;
+  }
+
+  /* ラベル:値（data-label 付きセルは2列グリッド相当で並ぶ） */
+  .m-cards td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-family: var(--mono);
+    font-size: 9.5px;
+    font-weight: 400;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+  }
+
+  .m-cards td.cell-kv {
+    flex: 0 0 calc(50% - 7px);
+  }
+
+  /* 見出しセル（氏名・日付）: 横1行・大きめ・折返さない */
+  .m-cards td.cell-main {
+    flex: 1 1 100%;
+    font-size: 15.5px;
+  }
+
+  .m-cards td.cell-main b {
+    white-space: nowrap;
+  }
+
+  .m-cards td.cell-wide {
+    flex: 1 1 100%;
+  }
+
+  /* メールは1行で省略 */
+  .m-cards td.cell-email {
+    flex: 1 1 100%;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* チップ類は横に流す */
+  .m-cards td.cell-chip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+  }
+
+  /* 操作ボタンは全幅の行にまとめ、均等に広げる */
+  .m-cards .row-actions {
+    flex: 1 1 100%;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 2px;
+  }
+
+  .m-cards .row-actions .btn {
+    flex: 1 1 auto;
+  }
+
+  /* 給与/交通費は折返して全部見せる */
+  .m-cards td.wage-cell {
+    flex: 1 1 100%;
+    white-space: normal;
+  }
+
+  /* 補正履歴の展開行 */
+  .m-cards .hist-cell {
+    flex: 1 1 100%;
+    padding: 8px 10px;
+  }
+
+  .hist-item {
+    row-gap: 2px;
+  }
+
+  /* シェル・カード余白の調整 */
+  .cols {
+    gap: 14px;
+  }
+
+  .punch-card {
+    width: 100%;
+  }
+
+  .mcard-wide {
+    padding: 16px;
+  }
+}
+
 /* ---------- 準備中 ---------- */
 .placeholder h1 {
   font-size: 23px;

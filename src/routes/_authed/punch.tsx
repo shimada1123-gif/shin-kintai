@@ -68,6 +68,7 @@ function PunchPage() {
   } | null>(null)
   const [punching, setPunching] = useState(false)
   const [soundOn, setSoundOn] = useState(true)
+  const [showAllToday, setShowAllToday] = useState(false)
   // 同じトークンで二度 punch を発火させないためのガード
   const firedRef = useRef<string | null>(null)
   const soundOnRef = useRef(soundOn)
@@ -256,9 +257,18 @@ function PunchPage() {
             </p>
           )}
           {todayQ.data && todayQ.data.length === 0 && <p className="note">本日の打刻はありません。</p>}
-          {todayQ.data?.map((a) => (
-            <table key={a.id}>
-              <tbody>
+          {(showAllToday ? todayQ.data : todayQ.data?.slice(0, 2))?.map((a) => (
+            <div key={a.id} className="today-card">
+              <div className="today-head mono">
+                {new Date(a.clock_in_at).toLocaleDateString('ja-JP', {
+                  month: '2-digit',
+                  day: '2-digit',
+                  weekday: 'short',
+                })}{' '}
+                {hhmm(a.clock_in_at)} 出勤分
+              </div>
+              <table>
+                <tbody>
                 <tr>
                   <td>状態</td>
                   <td>
@@ -306,9 +316,15 @@ function PunchPage() {
                   <td>位置</td>
                   <td>{gpsLabel(a.gps_status)}</td>
                 </tr>
-              </tbody>
-            </table>
+                </tbody>
+              </table>
+            </div>
           ))}
+          {todayQ.data && todayQ.data.length > 2 && !showAllToday && (
+            <button className="btn sm more-today" onClick={() => setShowAllToday(true)}>
+              もっと見る（あと {todayQ.data.length - 2} 件）
+            </button>
+          )}
         </div>
       </div>
     </section>

@@ -110,7 +110,7 @@ function UsersPage() {
 
       {usersQuery.data && (
         <div className="card table-wrap">
-          <table>
+          <table className="m-cards">
             <thead>
               <tr>
                 <th>氏名</th>
@@ -182,12 +182,12 @@ function UserRowView({
   return (
     <>
       <tr>
-        <td>{row.fullName}</td>
-        <td className="mono small">{row.email}</td>
+        <td className="cell-main"><b>{row.fullName}</b></td>
+        <td className="mono small cell-email" data-label="メール">{row.email}</td>
         <td>
           <span className={`role-badge role-${row.role}`}>{ROLE_LABEL[row.role]}</span>
         </td>
-        <td>{scope}</td>
+        <td className="cell-kv" data-label="スコープ">{scope}</td>
         <td>
           <span className={`st ${row.status === 'active' ? 'st-in' : 'st-out'}`}>
             <span className="dot" />

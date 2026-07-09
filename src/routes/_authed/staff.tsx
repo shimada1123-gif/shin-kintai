@@ -92,7 +92,7 @@ function MasterPage() {
 
           {staffQ.data && (
             <div className="table-wrap">
-              <table>
+              <table className="m-cards">
                 <thead>
                   <tr>
                     <th>氏名</th>
@@ -118,11 +118,11 @@ function MasterPage() {
                     const primary = s.assignments[0]
                     return (
                       <tr key={s.id}>
-                        <td>
+                        <td className="cell-main">
                           <b>{s.full_name}</b>
                           {s.status === 'inactive' && <span className="muted-tag">無効</span>}
                         </td>
-                        <td>
+                        <td className="cell-chip">
                           {s.tags.length === 0 ? (
                             <span className="note">—</span>
                           ) : (
@@ -133,10 +133,10 @@ function MasterPage() {
                             ))
                           )}
                         </td>
-                        <td className="note">
+                        <td className="note cell-kv" data-label="所属店舗">
                           {storeNames.length > 0 ? storeNames.join(' / ') : '—'}
                         </td>
-                        <td>
+                        <td className="cell-kv wage-cell" data-label="給与 / 交通費">
                           {primary ? (
                             <>
                               <div className="mono">{wageLabel(primary)}</div>
@@ -148,11 +148,11 @@ function MasterPage() {
                             </span>
                           )}
                         </td>
-                        <td>
+                        <td className="cell-chip">
                           {primary?.is_newbie && <span className="newbie">新人</span>}
                           {primary?.is_trainer && <span className="badge b-trainer">指導可</span>}
                         </td>
-                        <td>
+                        <td className="row-actions">
                           <button
                             className="btn sm"
                             disabled={!canEdit}
@@ -392,7 +392,7 @@ function StoresCard({
       )}
 
       <div className="table-wrap">
-        <table>
+        <table className="m-cards">
           <tbody>
             {stores.map((s) =>
               editingId === s.id ? (
@@ -411,13 +411,13 @@ function StoresCard({
                 </tr>
               ) : (
                 <tr key={s.id}>
-                  <td>
+                  <td className="cell-main">
                     <b>{s.name}</b>
                     <div className="note">
                       {areas.find((a) => a.id === s.area_id)?.name ?? 'エリア未設定'}
                     </div>
                   </td>
-                  <td className="mono note">
+                  <td className="mono note cell-wide">
                     {s.lat !== null && s.lng !== null ? `${s.lat}, ${s.lng}` : '座標未設定'}
                     <div className="mono">
                       半径 {s.geofence_radius_m}m ·{' '}
@@ -426,7 +426,7 @@ function StoresCard({
                       </span>
                     </div>
                   </td>
-                  <td>
+                  <td className="row-actions">
                     {canEdit && (
                       <button className="btn sm" onClick={() => setEditingId(s.id)}>
                         編集

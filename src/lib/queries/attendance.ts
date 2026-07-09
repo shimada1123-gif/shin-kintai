@@ -46,7 +46,7 @@ function toRow(r: Record<string, unknown>): AttRow {
     clock_out_at: r.clock_out_at as string | null,
     gps_status: r.gps_status as string,
     staff_name: staff?.full_name ?? '(不明)',
-    store_name: store?.name ?? '(不明)',
+    store_name: store?.name ?? '', // RLSで店舗が見えない場合は空 → 画面側で解決
     breaks,
   }
 }
@@ -238,6 +238,7 @@ export interface PendingCorrection {
   reason: string | null
   created_at: string
   staff_name: string
+  store_id: string
   store_name: string
   clock_in_at: string
 }
@@ -247,7 +248,7 @@ export async function fetchPending(): Promise<PendingCorrection[]> {
   const { data, error } = await supabase
     .from('attendance_corrections')
     .select(
-      'id, attendance_id, target_field, old_value, new_value, reason, created_at, attendance (clock_in_at, staff (full_name), stores (name))',
+      'id, attendance_id, target_field, old_value, new_value, reason, created_at, attendance (clock_in_at, store_id, staff (full_name), stores (name))',
     )
     .eq('status', 'pending')
     .order('created_at')
@@ -256,6 +257,7 @@ export async function fetchPending(): Promise<PendingCorrection[]> {
   return (data ?? []).map((c) => {
     const att = c.attendance as unknown as {
       clock_in_at: string
+      store_id: string
       staff: { full_name: string } | null
       stores: { name: string } | null
     } | null
@@ -268,7 +270,8 @@ export async function fetchPending(): Promise<PendingCorrection[]> {
       reason: c.reason,
       created_at: c.created_at,
       staff_name: att?.staff?.full_name ?? '(不明)',
-      store_name: att?.stores?.name ?? '(不明)',
+      store_id: att?.store_id ?? '',
+      store_name: att?.stores?.name ?? '',
       clock_in_at: att?.clock_in_at ?? '',
     }
   })

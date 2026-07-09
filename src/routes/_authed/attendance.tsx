@@ -88,6 +88,26 @@ function AttendancePage() {
 
 /* ------------------------------ 共通: 行テーブル ------------------------------ */
 
+/**
+ * 店舗名の解決。attendance の埋め込み stores は RLS（app_can_store）で落ちることが
+ * あるため（例: 店長の管理スコープ外の店舗で自分が打刻した行）、空なら me.stores から
+ * 引き直し、それでも見えない場合のみ「(権限外)」と表示する。
+ */
+function resolveStoreName(
+  row: { store_id: string; store_name: string },
+  stores: { id: string; name: string }[],
+): string {
+  if (row.store_name) return row.store_name
+  return stores.find((s) => s.id === row.store_id)?.name ?? '(権限外)'
+}
+
+function withStoreNames<T extends { store_id: string; store_name: string }>(
+  rows: T[],
+  stores: { id: string; name: string }[],
+): T[] {
+  return rows.map((r) => (r.store_name ? r : { ...r, store_name: resolveStoreName(r, stores) }))
+}
+
 function gpsChip(status: string) {
   const label = status === 'ok' ? '圏内' : status === 'out' ? '圏外' : '位置未確認'
   const cls = status === 'ok' ? 'gps-ok' : status === 'out' ? 'gps-out' : 'gps-unv'
@@ -127,7 +147,7 @@ function RowsTable({
 
   return (
     <div className="card table-wrap">
-      <table>
+      <table className="m-cards">
         <thead>
           <tr>
             {showDate && <th>日付</th>}
@@ -154,7 +174,7 @@ function RowsTable({
             <Fragment key={r.id}>
               <tr>
                 {showDate && (
-                  <td className="mono small">
+                  <td className="mono small cell-main">
                     {new Date(r.clock_in_at).toLocaleDateString('ja-JP', {
                       month: '2-digit',
                       day: '2-digit',
@@ -163,17 +183,25 @@ function RowsTable({
                   </td>
                 )}
                 {showStaff && (
-                  <td>
+                  <td className={showDate ? undefined : 'cell-main'}>
                     <b>{r.staff_name}</b>
                   </td>
                 )}
-                <td className="note">{r.store_name}</td>
-                <td className="mono">{hhmm(r.clock_in_at)}</td>
-                <td className="mono">{hhmm(r.clock_out_at)}</td>
-                <td className="mono">{fmtHM(breakMinutes(r.breaks))}</td>
-                <td className="mono strong-hm">{fmtHM(workedMinutes(r))}</td>
-                <td>{gpsChip(r.gps_status)}</td>
-                <td>{statusChip(r)}</td>
+                <td className="note cell-wide">{r.store_name}</td>
+                <td className="mono cell-kv" data-label="出勤">
+                  {hhmm(r.clock_in_at)}
+                </td>
+                <td className="mono cell-kv" data-label="退勤">
+                  {hhmm(r.clock_out_at)}
+                </td>
+                <td className="mono cell-kv" data-label="休憩計">
+                  {fmtHM(breakMinutes(r.breaks))}
+                </td>
+                <td className="mono strong-hm cell-kv" data-label="実働">
+                  {fmtHM(workedMinutes(r))}
+                </td>
+                <td className="cell-chip">{gpsChip(r.gps_status)}</td>
+                <td className="cell-chip">{statusChip(r)}</td>
                 {hasActions && (
                   <td className="row-actions">
                     {onEdit && (
@@ -346,10 +374,11 @@ function DayView({ canEdit }: { canEdit: boolean }) {
     setExporting(true)
     try {
       const to = rangeTo || day
-      const rows =
+      const raw =
         rangeTo && rangeTo !== day
           ? await fetchRangeAll(day, rangeTo, storeId || null)
           : (q.data ?? [])
+      const rows = withStoreNames(raw, me.stores)
       if (rows.length === 0) {
         setExportMsg('対象データがありません')
         return
@@ -449,7 +478,7 @@ function DayView({ canEdit }: { canEdit: boolean }) {
       )}
       {q.data && (
         <RowsTable
-          rows={q.data}
+          rows={withStoreNames(q.data, me.stores)}
           showStaff
           showDate={false}
           onEdit={canEdit ? setEditing : undefined}
@@ -517,7 +546,8 @@ function StaffView({ canEdit, lockToSelf }: { canEdit: boolean; lockToSelf: bool
     setExportMsg(null)
     setExporting(true)
     try {
-      const rows = allStaff ? await fetchRangeAll(range.from, range.to) : (q.data ?? [])
+      const raw = allStaff ? await fetchRangeAll(range.from, range.to) : (q.data ?? [])
+      const rows = withStoreNames(raw, me.stores)
       const csv = summaryCsvRows(rows, assignments, range.from, range.to)
       if (csv.length <= 1) {
         setExportMsg('対象データがありません')
@@ -605,7 +635,7 @@ function StaffView({ canEdit, lockToSelf }: { canEdit: boolean; lockToSelf: bool
             <div className="v">{fmtHM(totalMin)}</div>
           </div>
           <RowsTable
-            rows={q.data}
+            rows={withStoreNames(q.data, me.stores)}
             showStaff={false}
             showDate
             onEdit={canEdit ? setEditing : undefined}
@@ -966,6 +996,7 @@ function RequestModal({
 /* ------------------------------- 承認待ち一覧 ------------------------------- */
 
 function PendingView() {
+  const { me } = useMe()
   const qc = useQueryClient()
   const q = useQuery({ queryKey: ['att', 'pending'], queryFn: fetchPending })
   const [notes, setNotes] = useState<Record<string, string>>({})
@@ -999,7 +1030,8 @@ function PendingView() {
           <div className="pending-head">
             <b>{c.staff_name}</b>
             <span className="note">
-              {c.store_name} · {new Date(c.clock_in_at).toLocaleDateString('ja-JP')} の打刻
+              {resolveStoreName(c, me?.stores ?? [])} ·{' '}
+              {new Date(c.clock_in_at).toLocaleDateString('ja-JP')} の打刻
             </span>
             <span className="mono small pending-when">
               申請 {new Date(c.created_at).toLocaleString('ja-JP')}
