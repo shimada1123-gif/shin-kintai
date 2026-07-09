@@ -267,6 +267,73 @@ export async function rejectCorrection(c: PendingCorrection, note?: string): Pro
   if (error) throw error
 }
 
+/* ------------------------- 補正履歴（1打刻ぶん） ------------------------- */
+
+export interface CorrectionEntry {
+  id: string
+  target_field: string
+  old_value: string | null
+  new_value: string | null
+  reason: string | null
+  status: string
+  created_at: string
+  /** 操作した人の表示名（staff 紐付けが無い uid は「管理者」） */
+  actor_name: string
+  /** 申請型（pending 起点）か、管理者の直接修正か */
+  is_direct: boolean
+}
+
+/**
+ * その attendance の補正履歴を新しい順に返す。
+ * 可視性は 0006 の corr_sel（RLS）が最終防壁：
+ * スタッフは staff_see_corrections=false のとき 0 件になる（エラーではない）。
+ * uid → 氏名の解決は staff.user_id 経由（staff_sel はメンバー全員が SELECT 可）。
+ */
+export async function fetchCorrectionsFor(attendanceId: string): Promise<CorrectionEntry[]> {
+  const supabase = await getSupabase()
+  const { data, error } = await supabase
+    .from('attendance_corrections')
+    .select('id, target_field, old_value, new_value, reason, status, created_at, requested_by, approved_by')
+    .eq('attendance_id', attendanceId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  const rows = data ?? []
+  if (rows.length === 0) return []
+
+  // 関係者の uid をまとめて氏名解決（owner 等 staff 行が無い uid は「管理者」）
+  const uids = [
+    ...new Set(rows.flatMap((r) => [r.requested_by, r.approved_by]).filter((v): v is string => !!v)),
+  ]
+  const names = new Map<string, string>()
+  if (uids.length > 0) {
+    const { data: staffRows } = await supabase
+      .from('staff')
+      .select('user_id, full_name')
+      .in('user_id', uids)
+    for (const s of staffRows ?? []) {
+      if (s.user_id) names.set(s.user_id, s.full_name)
+    }
+  }
+  const nameOf = (uid: string | null) => (uid ? (names.get(uid) ?? '管理者') : '—')
+
+  return rows.map((r) => {
+    const direct = r.status === 'approved' && !!r.requested_by && r.requested_by === r.approved_by
+    // 直接修正なら操作者=承認者。申請型なら起票者を主に表示する
+    const actor = direct ? nameOf(r.approved_by) : nameOf(r.requested_by)
+    return {
+      id: r.id,
+      target_field: r.target_field,
+      old_value: r.old_value,
+      new_value: r.new_value,
+      reason: r.reason,
+      status: r.status,
+      created_at: r.created_at,
+      actor_name: actor,
+      is_direct: direct,
+    }
+  })
+}
+
 /** target_field 規約 → 画面表示ラベル */
 export function targetLabel(target: string): string {
   const [field] = target.split('#')

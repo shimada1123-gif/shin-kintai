@@ -1855,6 +1855,73 @@ input[type='datetime-local'] {
   width: 100%;
 }
 
+/* 補正履歴（行の展開） */
+.hist-cell {
+  background: #faf9f6;
+  padding: 10px 16px;
+}
+
+.hist-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hist-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  padding: 4px 0;
+  border-bottom: 1px dashed var(--line-2);
+}
+
+.hist-item:last-child {
+  border-bottom: none;
+}
+
+.hist-when {
+  color: var(--muted);
+  min-width: 88px;
+}
+
+.hist-arrow {
+  color: var(--gold);
+  font-weight: 900;
+}
+
+.corr-status {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
+.corr-status.cs-pending {
+  background: var(--gold-soft);
+  color: #7a5a10;
+}
+
+.corr-status.cs-approved {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.corr-status.cs-rejected {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.btn.hist-open {
+  border-color: var(--gold);
+  color: #7a5a10;
+}
+
 /* 承認待ちカード */
 .pending-card {
   padding: 16px 18px;

@@ -5,6 +5,10 @@ import { errText } from '@/lib/errors'
 import { useMe } from '@/lib/me-context'
 import { usePermissions } from '@/lib/perm'
 import { fetchStaffList, fetchStores } from '@/lib/queries/master'
+import {
+  fetchStaffSeeCorrections,
+  setStaffSeeCorrections,
+} from '@/lib/queries/tenant-settings'
 import { clearDemo, demoPunch, issueDisplayUrl, type PunchKind } from '@/lib/server/punch'
 import { getTestMode, setGpsPolicy, setTestMode } from '@/lib/server/settings'
 
@@ -46,6 +50,8 @@ function SettingsPage() {
         loading={testModeQ.isPending}
         onChanged={() => void qc.invalidateQueries({ queryKey: ['test_mode'] })}
       />
+
+      <CorrVisibilityCard isOwner={isOwner} tenantId={me.tenantId} />
 
       <div className="sec-h">
         <h3>店舗のGPSポリシー</h3>
@@ -121,6 +127,62 @@ function TestModeCard({
             onClick={() => isOwner && !toggle.isPending && toggle.mutate(!enabled)}
           />
           テストモードを有効にする
+        </label>
+      )}
+
+      {!isOwner && <p className="note">切り替えられるのはオーナーだけです。</p>}
+    </div>
+  )
+}
+
+/* --------------------- スタッフ補正履歴の可視性トグル --------------------- */
+
+function CorrVisibilityCard({ isOwner, tenantId }: { isOwner: boolean; tenantId: string }) {
+  const qc = useQueryClient()
+  const [error, setError] = useState<string | null>(null)
+
+  const q = useQuery({
+    queryKey: ['staff_see_corr', tenantId],
+    queryFn: () => fetchStaffSeeCorrections(tenantId),
+  })
+
+  // 楽観更新はしない。保存後に再取得（invalidate）で反映する。
+  const toggle = useMutation({
+    mutationFn: (next: boolean) => setStaffSeeCorrections(tenantId, next),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['staff_see_corr', tenantId] }),
+    onError: (e) => setError(errText(e, '設定を更新できませんでした')),
+  })
+
+  const enabled = q.data ?? true // 既定 ON
+
+  return (
+    <div className="card settings-card">
+      <div className="card-title">スタッフの補正履歴</div>
+      <p className="note">
+        オフにすると、スタッフは自分の勤怠がいつ・誰に修正されたかを閲覧できなくなります
+        （労務の透明性のため既定はオンを推奨）。この制限はデータベース側（RLS）でも
+        強制され、画面を迂回しても閲覧できません。
+      </p>
+
+      {error && (
+        <p className="login-error" role="alert">
+          {error}
+        </p>
+      )}
+
+      {q.isPending ? (
+        <p className="note">読み込み中…</p>
+      ) : (
+        <label className="tgl">
+          <span
+            className={`cbx2${enabled ? ' on' : ''}${isOwner ? '' : ' cbx2-disabled'}`}
+            onClick={() => {
+              if (!isOwner || toggle.isPending) return
+              setError(null)
+              toggle.mutate(!enabled)
+            }}
+          />
+          スタッフに自分の勤怠補正履歴を見せる
         </label>
       )}
 

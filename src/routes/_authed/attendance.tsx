@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { errText } from '@/lib/errors'
@@ -7,6 +7,7 @@ import { usePermissions } from '@/lib/perm'
 import {
   applyDirectCorrection,
   approveCorrection,
+  fetchCorrectionsFor,
   fetchDay,
   fetchPending,
   fetchStaffRange,
@@ -107,13 +108,20 @@ function RowsTable({
   showDate,
   onEdit,
   onRequest,
+  historyMode,
 }: {
   rows: AttRow[]
   showStaff: boolean
   showDate: boolean
   onEdit?: (row: AttRow) => void
   onRequest?: (row: AttRow) => void
+  /** admin=監査ビュー / self=本人ビュー（RLSが0件を返すことがある） */
+  historyMode?: 'admin' | 'self'
 }) {
+  const [openHistory, setOpenHistory] = useState<string | null>(null)
+  const hasActions = !!(onEdit || onRequest || historyMode)
+  const colCount = 7 + (showDate ? 1 : 0) + (showStaff ? 1 : 0) + (hasActions ? 1 : 0)
+
   return (
     <div className="card table-wrap">
       <table>
@@ -128,59 +136,143 @@ function RowsTable({
             <th>実働</th>
             <th>GPS</th>
             <th>状態</th>
-            {(onEdit || onRequest) && <th />}
+            {hasActions && <th />}
           </tr>
         </thead>
         <tbody>
           {rows.length === 0 && (
             <tr>
-              <td colSpan={10} className="note">
+              <td colSpan={colCount} className="note">
                 対象の打刻がありません。
               </td>
             </tr>
           )}
           {rows.map((r) => (
-            <tr key={r.id}>
-              {showDate && (
-                <td className="mono small">
-                  {new Date(r.clock_in_at).toLocaleDateString('ja-JP', {
-                    month: '2-digit',
-                    day: '2-digit',
-                    weekday: 'short',
-                  })}
-                </td>
+            <Fragment key={r.id}>
+              <tr>
+                {showDate && (
+                  <td className="mono small">
+                    {new Date(r.clock_in_at).toLocaleDateString('ja-JP', {
+                      month: '2-digit',
+                      day: '2-digit',
+                      weekday: 'short',
+                    })}
+                  </td>
+                )}
+                {showStaff && (
+                  <td>
+                    <b>{r.staff_name}</b>
+                  </td>
+                )}
+                <td className="note">{r.store_name}</td>
+                <td className="mono">{hhmm(r.clock_in_at)}</td>
+                <td className="mono">{hhmm(r.clock_out_at)}</td>
+                <td className="mono">{fmtHM(breakMinutes(r.breaks))}</td>
+                <td className="mono strong-hm">{fmtHM(workedMinutes(r))}</td>
+                <td>{gpsChip(r.gps_status)}</td>
+                <td>{statusChip(r)}</td>
+                {hasActions && (
+                  <td className="row-actions">
+                    {onEdit && (
+                      <button className="btn sm" onClick={() => onEdit(r)}>
+                        編集
+                      </button>
+                    )}
+                    {onRequest && (
+                      <button className="btn sm" onClick={() => onRequest(r)}>
+                        修正を申請
+                      </button>
+                    )}
+                    {historyMode && (
+                      <button
+                        className={`btn sm${openHistory === r.id ? ' hist-open' : ''}`}
+                        onClick={() => setOpenHistory(openHistory === r.id ? null : r.id)}
+                      >
+                        {openHistory === r.id ? '履歴を閉じる' : '補正履歴'}
+                      </button>
+                    )}
+                  </td>
+                )}
+              </tr>
+              {historyMode && openHistory === r.id && (
+                <tr>
+                  <td colSpan={colCount} className="hist-cell">
+                    <CorrectionHistory attendanceId={r.id} mode={historyMode} />
+                  </td>
+                </tr>
               )}
-              {showStaff && (
-                <td>
-                  <b>{r.staff_name}</b>
-                </td>
-              )}
-              <td className="note">{r.store_name}</td>
-              <td className="mono">{hhmm(r.clock_in_at)}</td>
-              <td className="mono">{hhmm(r.clock_out_at)}</td>
-              <td className="mono">{fmtHM(breakMinutes(r.breaks))}</td>
-              <td className="mono strong-hm">{fmtHM(workedMinutes(r))}</td>
-              <td>{gpsChip(r.gps_status)}</td>
-              <td>{statusChip(r)}</td>
-              {(onEdit || onRequest) && (
-                <td className="row-actions">
-                  {onEdit && (
-                    <button className="btn sm" onClick={() => onEdit(r)}>
-                      編集
-                    </button>
-                  )}
-                  {onRequest && (
-                    <button className="btn sm" onClick={() => onRequest(r)}>
-                      修正を申請
-                    </button>
-                  )}
-                </td>
-              )}
-            </tr>
+            </Fragment>
           ))}
         </tbody>
       </table>
     </div>
+  )
+}
+
+/* ---------------------------- 補正履歴（展開表示） ---------------------------- */
+
+const CORR_STATUS: Record<string, { label: string; cls: string }> = {
+  pending: { label: '承認待ち', cls: 'cs-pending' },
+  approved: { label: '承認済み', cls: 'cs-approved' },
+  rejected: { label: '却下', cls: 'cs-rejected' },
+}
+
+function CorrectionHistory({
+  attendanceId,
+  mode,
+}: {
+  attendanceId: string
+  mode: 'admin' | 'self'
+}) {
+  const q = useQuery({
+    queryKey: ['att', 'corr', attendanceId],
+    queryFn: () => fetchCorrectionsFor(attendanceId),
+  })
+
+  if (q.isPending) return <p className="note">履歴を読み込み中…</p>
+
+  // RLS に弾かれた場合もエラーにせず案内文言に落とす
+  if (q.error) {
+    return <p className="note">補正・申請の履歴は管理者にお問い合わせください。</p>
+  }
+
+  if (!q.data || q.data.length === 0) {
+    return mode === 'self' ? (
+      <p className="note">
+        補正・申請の履歴はありません。閲覧が制限されている場合は、管理者にお問い合わせください。
+      </p>
+    ) : (
+      <p className="note">補正履歴はありません。</p>
+    )
+  }
+
+  return (
+    <ul className="hist-list">
+      {q.data.map((c) => {
+        const st = CORR_STATUS[c.status] ?? { label: c.status, cls: '' }
+        return (
+          <li key={c.id} className="hist-item">
+            <span className="mono small hist-when">
+              {new Date(c.created_at).toLocaleString('ja-JP', {
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </span>
+            <span className="badge b-tag">{targetLabel(c.target_field)}</span>
+            <span className="mono">{hhmm(c.old_value)}</span>
+            <span className="hist-arrow">→</span>
+            <span className="mono strong-hm">{hhmm(c.new_value)}</span>
+            <span className={`corr-status ${st.cls}`}>{st.label}</span>
+            <span className="note">
+              {c.is_direct ? `${c.actor_name} が直接修正` : `${c.actor_name} の申請`}
+              {c.reason ? ` · ${c.reason}` : ''}
+            </span>
+          </li>
+        )
+      })}
+    </ul>
   )
 }
 
@@ -232,6 +324,7 @@ function DayView({ canEdit }: { canEdit: boolean }) {
           showStaff
           showDate={false}
           onEdit={canEdit ? setEditing : undefined}
+          historyMode={canEdit ? 'admin' : undefined}
         />
       )}
 
@@ -359,6 +452,7 @@ function StaffView({ canEdit, lockToSelf }: { canEdit: boolean; lockToSelf: bool
             showDate
             onEdit={canEdit ? setEditing : undefined}
             onRequest={lockToSelf ? setRequesting : undefined}
+            historyMode={lockToSelf ? 'self' : canEdit ? 'admin' : undefined}
           />
         </>
       )}
