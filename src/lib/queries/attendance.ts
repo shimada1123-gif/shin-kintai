@@ -93,6 +93,41 @@ export async function fetchStaffRange(
   return (data ?? []).map((r) => toRow(r as Record<string, unknown>))
 }
 
+/**
+ * 期間内の全スタッフ分（CSV用）。デモ除外・RLSスコープ内。
+ * 大量件数に備えて1000行ずつ分割取得する。
+ */
+export async function fetchRangeAll(
+  fromDay: string,
+  toDay: string,
+  storeId?: string | null,
+): Promise<AttRow[]> {
+  const supabase = await getSupabase()
+  const start = new Date(`${fromDay}T00:00:00`)
+  const end = new Date(new Date(`${toDay}T00:00:00`).getTime() + 24 * 60 * 60 * 1000)
+
+  const PAGE = 1000
+  const all: AttRow[] = []
+  for (let offset = 0; ; offset += PAGE) {
+    let q = supabase
+      .from('attendance')
+      .select(ROW_SELECT)
+      .eq('is_demo', false)
+      .gte('clock_in_at', start.toISOString())
+      .lt('clock_in_at', end.toISOString())
+      .order('clock_in_at')
+      .range(offset, offset + PAGE - 1)
+    if (storeId) q = q.eq('store_id', storeId)
+
+    const { data, error } = await q
+    if (error) throw error
+    const page = (data ?? []).map((r) => toRow(r as Record<string, unknown>))
+    all.push(...page)
+    if (page.length < PAGE) break
+  }
+  return all
+}
+
 async function currentUserId(): Promise<string> {
   const supabase = await getSupabase()
   const { data } = await supabase.auth.getSession()

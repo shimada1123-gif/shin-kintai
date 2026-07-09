@@ -1855,6 +1855,19 @@ input[type='datetime-local'] {
   width: 100%;
 }
 
+/* CSVエクスポート行 */
+.export-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.export-row .field {
+  min-width: 170px;
+}
+
 /* 補正履歴（行の展開） */
 .hist-cell {
   background: #faf9f6;

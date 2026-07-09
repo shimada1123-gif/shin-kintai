@@ -1,6 +1,8 @@
 import { Fragment, useMemo, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { detailCsvRows, summaryCsvRows } from '@/lib/attendance-csv'
+import { downloadCsv } from '@/lib/csv'
 import { errText } from '@/lib/errors'
 import { useMe } from '@/lib/me-context'
 import { usePermissions } from '@/lib/perm'
@@ -10,6 +12,7 @@ import {
   fetchCorrectionsFor,
   fetchDay,
   fetchPending,
+  fetchRangeAll,
   fetchStaffRange,
   rejectCorrection,
   requestCorrection,
@@ -283,6 +286,9 @@ function DayView({ canEdit }: { canEdit: boolean }) {
   const [day, setDay] = useState(ymd(new Date()))
   const [storeId, setStoreId] = useState('')
   const [editing, setEditing] = useState<AttRow | null>(null)
+  const [rangeTo, setRangeTo] = useState('')
+  const [exportMsg, setExportMsg] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
   const qc = useQueryClient()
 
   const q = useQuery({
@@ -291,6 +297,32 @@ function DayView({ canEdit }: { canEdit: boolean }) {
   })
 
   if (!me) return null
+
+  const storeName = storeId ? (me.stores.find((s) => s.id === storeId)?.name ?? '店舗') : '全店'
+
+  // 明細CSV: 終了日が空なら表示中の1日、指定があれば期間でまとめて取得
+  const exportDetail = async () => {
+    setExportMsg(null)
+    setExporting(true)
+    try {
+      const to = rangeTo || day
+      const rows =
+        rangeTo && rangeTo !== day
+          ? await fetchRangeAll(day, rangeTo, storeId || null)
+          : (q.data ?? [])
+      if (rows.length === 0) {
+        setExportMsg('対象データがありません')
+        return
+      }
+      const name =
+        to === day ? `勤怠明細_${storeName}_${day}.csv` : `勤怠明細_${storeName}_${day}_${to}.csv`
+      downloadCsv(name, detailCsvRows(rows))
+    } catch (e) {
+      setExportMsg(errText(e, 'エクスポートに失敗しました'))
+    } finally {
+      setExporting(false)
+    }
+  }
 
   return (
     <>
@@ -328,6 +360,17 @@ function DayView({ canEdit }: { canEdit: boolean }) {
         />
       )}
 
+      <div className="export-row">
+        <label className="field">
+          <span>終了日（期間で出す場合）</span>
+          <input type="date" value={rangeTo} min={day} onChange={(e) => setRangeTo(e.target.value)} />
+        </label>
+        <button className="btn sm" disabled={exporting} onClick={() => void exportDetail()}>
+          {exporting ? '生成中…' : 'CSVエクスポート（明細）'}
+        </button>
+        {exportMsg && <span className="note">{exportMsg}</span>}
+      </div>
+
       {editing && (
         <EditModal
           row={editing}
@@ -361,10 +404,11 @@ function StaffView({ canEdit, lockToSelf }: { canEdit: boolean; lockToSelf: bool
   const [editing, setEditing] = useState<AttRow | null>(null)
   const [requesting, setRequesting] = useState<AttRow | null>(null)
 
+  // 集計CSVの交通費計算にも使うため、本人ビューでも取得する
+  // （staff_assignments は RLS により自分の分しか返らない）
   const staffQ = useQuery({
     queryKey: ['master', 'staff'],
     queryFn: fetchStaffList,
-    enabled: !lockToSelf,
   })
 
   const range = preset === 'this' ? monthRange(0) : preset === 'last' ? monthRange(-1) : custom
@@ -375,7 +419,34 @@ function StaffView({ canEdit, lockToSelf }: { canEdit: boolean; lockToSelf: bool
     enabled: !!staffId,
   })
 
+  const [exportMsg, setExportMsg] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
+
   if (!me) return null
+
+  const assignments = (staffQ.data ?? []).flatMap((s) => s.assignments)
+
+  // 集計CSV: 選択中スタッフ（表示中データ）または全スタッフ一括（期間で取得）
+  const exportSummary = async (allStaff: boolean) => {
+    setExportMsg(null)
+    setExporting(true)
+    try {
+      const rows = allStaff ? await fetchRangeAll(range.from, range.to) : (q.data ?? [])
+      const csv = summaryCsvRows(rows, assignments, range.from, range.to)
+      if (csv.length <= 1) {
+        setExportMsg('対象データがありません')
+        return
+      }
+      const who = allStaff
+        ? '全スタッフ'
+        : ((staffQ.data ?? []).find((s) => s.id === staffId)?.full_name ?? 'スタッフ')
+      downloadCsv(`勤怠集計_${who}_${range.from}_${range.to}.csv`, csv)
+    } catch (e) {
+      setExportMsg(errText(e, 'エクスポートに失敗しました'))
+    } finally {
+      setExporting(false)
+    }
+  }
   if (lockToSelf && !me.staffId) {
     return <p className="note">このアカウントにスタッフ情報が紐付いていないため、勤怠はありません。</p>
   }
@@ -454,6 +525,18 @@ function StaffView({ canEdit, lockToSelf }: { canEdit: boolean; lockToSelf: bool
             onRequest={lockToSelf ? setRequesting : undefined}
             historyMode={lockToSelf ? 'self' : canEdit ? 'admin' : undefined}
           />
+
+          <div className="export-row">
+            <button className="btn sm" disabled={exporting} onClick={() => void exportSummary(false)}>
+              {exporting ? '生成中…' : 'CSVエクスポート（集計）'}
+            </button>
+            {!lockToSelf && (
+              <button className="btn sm" disabled={exporting} onClick={() => void exportSummary(true)}>
+                全スタッフ一括（集計）
+              </button>
+            )}
+            {exportMsg && <span className="note">{exportMsg}</span>}
+          </div>
         </>
       )}
 
