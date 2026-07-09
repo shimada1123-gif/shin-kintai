@@ -25,8 +25,9 @@ const KIND_CLASS: Record<PunchKind, string> = {
 }
 
 /**
- * モデルB: 種別ボタンを押すたびに1枚だけワンタイムQRを発行する。
- * ポーリングはしない。1回読まれたら無効。次の人はもう一度ボタンを押す。
+ * モデルB（レジ横の据置端末で開きっぱなしにする1画面）。
+ * 上部の種別ボタンは常時表示。押すたびに前のQRを破棄して
+ * その種別のワンタイムQRを1枚だけ下部に表示する。
  */
 function DisplayPage() {
   const { storeId } = Route.useParams()
@@ -39,6 +40,7 @@ function DisplayPage() {
   const [issuing, setIssuing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // ボタン押下 = 前のQRを破棄して新しいワンタイムQRに差し替える
   const issue = async (kind: PunchKind) => {
     setIssuing(true)
     setError(null)
@@ -48,17 +50,15 @@ function DisplayPage() {
       const expiresAt = new Date(res.expires_at).getTime()
       setCurrent({ kind: res.kind, expiresAt })
       setRemaining(Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000)))
-      // canvas は current がセットされてから描画される（次フレームで ref が付く）
-      requestAnimationFrame(() => {
-        if (canvasRef.current) {
-          const punchUrl = `${window.location.origin}/punch?token=${encodeURIComponent(res.token)}`
-          void QRCode.toCanvas(canvasRef.current, punchUrl, {
-            width: 220,
-            margin: 0,
-            color: { dark: '#1A2233', light: '#FFFFFF' },
-          })
-        }
-      })
+      // canvas は常時マウントなので直接描画できる
+      if (canvasRef.current) {
+        const punchUrl = `${window.location.origin}/punch?token=${encodeURIComponent(res.token)}`
+        await QRCode.toCanvas(canvasRef.current, punchUrl, {
+          width: 220,
+          margin: 0,
+          color: { dark: '#1A2233', light: '#FFFFFF' },
+        })
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'QRを発行できませんでした。')
       setCurrent(null)
@@ -67,7 +67,7 @@ function DisplayPage() {
     }
   }
 
-  // 失効カウントダウン（表示のみ。再発行はしない）
+  // 失効カウントダウン（表示のみ。自動再発行はしない）
   useEffect(() => {
     if (!current) return
     const id = setInterval(() => {
@@ -81,15 +81,30 @@ function DisplayPage() {
 
   return (
     <div className="display-page">
-      <div className="display-card card">
-        <div className="noren" aria-hidden="true">
-          <i />
-          <i />
-          <i />
-          <i />
+      <div className="display-card card display-wide">
+        <div className="display-head">
+          <div className="noren" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+            <i />
+          </div>
+          <div className="display-store">{storeName || '打刻QR発行'}</div>
         </div>
 
-        <div className="display-store">{storeName || '打刻QR発行'}</div>
+        {/* 上部: 種別ボタン（常時表示・タッチ大きめ・選択中をハイライト） */}
+        <div className="kind-grid">
+          {(Object.keys(KIND_LABEL) as PunchKind[]).map((k) => (
+            <button
+              key={k}
+              className={`pbtn kind-btn ${KIND_CLASS[k]}${current?.kind === k ? ' is-current' : ''}`}
+              disabled={issuing}
+              onClick={() => void issue(k)}
+            >
+              {KIND_LABEL[k]}
+            </button>
+          ))}
+        </div>
 
         {error && (
           <p className="login-error" role="alert">
@@ -97,47 +112,35 @@ function DisplayPage() {
           </p>
         )}
 
-        {!current ? (
-          <>
-            <div className="note">打刻の種類を選ぶと、1回だけ使えるQRを表示します</div>
-            <div className="punchbtns display-kinds">
-              {(Object.keys(KIND_LABEL) as PunchKind[]).map((k) => (
-                <button
-                  key={k}
-                  className={`pbtn ${KIND_CLASS[k]}`}
-                  disabled={issuing}
-                  onClick={() => void issue(k)}
-                >
-                  {issuing ? '発行中…' : KIND_LABEL[k]}
-                </button>
-              ))}
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="display-kind-tag">{KIND_LABEL[current.kind]} 用QR</div>
-
-            <div className={`qrbox${expired ? ' qr-expired' : ''}`}>
-              <canvas ref={canvasRef} width={220} height={220} />
-              {expired && <div className="qr-expired-overlay">期限切れ</div>}
-            </div>
-
-            <div className="qrring">
-              <span className="num">{remaining}</span>
-              <div className="bar">
-                <i style={{ width: `${pct}%` }} />
+        {/* 下部: QRエリア（ボタンを押すたびに差し替わる） */}
+        <div className="qr-area">
+          <div className={`qrbox${expired ? ' qr-expired' : ''}${current ? '' : ' qr-empty'}`}>
+            <canvas ref={canvasRef} width={220} height={220} />
+            {!current && <div className="qr-placeholder">上のボタンを押すと{'\n'}QRが表示されます</div>}
+            {expired && (
+              <div className="qr-expired-overlay">
+                期限切れ
+                <span className="qr-expired-sub">もう一度ボタンを押してください</span>
               </div>
-            </div>
+            )}
+          </div>
 
-            <div className="note display-foot">
-              1回読まれたら無効になります。次の人はもう一度ボタンを押してください。
-            </div>
+          {current && (
+            <>
+              <div className="display-kind-tag">{KIND_LABEL[current.kind]} 用QR</div>
+              <div className="qrring">
+                <span className="num">{remaining}</span>
+                <div className="bar">
+                  <i style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+            </>
+          )}
 
-            <button className="btn pri reissue" disabled={issuing} onClick={() => setCurrent(null)}>
-              新しいQRを出す
-            </button>
-          </>
-        )}
+          <div className="note display-foot">
+            1回読まれたら無効になります。次の人は該当ボタンをもう一度押してください。
+          </div>
+        </div>
       </div>
     </div>
   )

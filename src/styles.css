@@ -1370,10 +1370,52 @@ tr:last-child td {
   margin-top: 8px;
 }
 
-/* モデルB: 種別ボタンと使い捨てQR */
-.display-kinds {
+/* モデルB: 据置1画面（上=種別ボタン常時表示 / 下=QR切替） */
+.display-wide {
   width: 100%;
-  margin-top: 14px;
+  max-width: 420px;
+  gap: 14px;
+}
+
+.display-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.kind-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  width: 100%;
+}
+
+/* タブレット据置想定: 大きめのタッチターゲット */
+.kind-btn {
+  padding: 22px 10px;
+  font-size: 18px;
+  border-radius: 13px;
+  opacity: 0.92;
+}
+
+.kind-btn:disabled {
+  opacity: 0.4;
+}
+
+/* いま表示中のQRの種別をハイライト */
+.kind-btn.is-current {
+  opacity: 1;
+  outline: 3px solid var(--gold);
+  outline-offset: 2px;
+  box-shadow: 0 6px 18px -8px rgb(20 25 40 / 45%);
+}
+
+.qr-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
 }
 
 .display-kind-tag {
@@ -1382,29 +1424,50 @@ tr:last-child td {
   font-weight: 700;
   letter-spacing: 0.08em;
   color: var(--gold);
-  margin-top: 4px;
+  margin-top: 10px;
 }
 
 .qrbox {
   position: relative;
+  margin-top: 4px;
+}
+
+.qr-empty canvas {
+  opacity: 0;
+}
+
+.qr-placeholder {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+  white-space: pre-line;
+  line-height: 1.9;
 }
 
 .qr-expired canvas {
-  opacity: 0.15;
+  opacity: 0.12;
 }
 
 .qr-expired-overlay {
   position: absolute;
   inset: 0;
   display: grid;
-  place-items: center;
+  place-content: center;
+  justify-items: center;
+  gap: 6px;
   font-weight: 900;
   color: var(--red);
-  font-size: 15px;
+  font-size: 17px;
 }
 
-.reissue {
-  margin-top: 12px;
+.qr-expired-sub {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--ink-2);
 }
 
 .display-url {
