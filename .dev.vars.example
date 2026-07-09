@@ -1,0 +1,4 @@
+# Workers ローカル実行時のサーバー側 env（VITE_ 接頭辞なし = クライアント非露出）
+# 実値はコミットしないこと。本番は `wrangler secret put SUPABASE_SERVICE_ROLE_KEY`。
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=

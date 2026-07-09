@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as AuthedIndexRouteImport } from './routes/_authed/index'
+import { Route as AuthedUsersRouteImport } from './routes/_authed/users'
 import { Route as AuthedStaffRouteImport } from './routes/_authed/staff'
 import { Route as AuthedShiftsRouteImport } from './routes/_authed/shifts'
 import { Route as AuthedSettingsRouteImport } from './routes/_authed/settings'
@@ -30,6 +31,11 @@ const AuthedRoute = AuthedRouteImport.update({
 const AuthedIndexRoute = AuthedIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedUsersRoute = AuthedUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
   getParentRoute: () => AuthedRoute,
 } as any)
 const AuthedStaffRoute = AuthedStaffRouteImport.update({
@@ -66,6 +72,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof AuthedSettingsRoute
   '/shifts': typeof AuthedShiftsRoute
   '/staff': typeof AuthedStaffRoute
+  '/users': typeof AuthedUsersRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
@@ -74,6 +81,7 @@ export interface FileRoutesByTo {
   '/settings': typeof AuthedSettingsRoute
   '/shifts': typeof AuthedShiftsRoute
   '/staff': typeof AuthedStaffRoute
+  '/users': typeof AuthedUsersRoute
   '/': typeof AuthedIndexRoute
 }
 export interface FileRoutesById {
@@ -85,6 +93,7 @@ export interface FileRoutesById {
   '/_authed/settings': typeof AuthedSettingsRoute
   '/_authed/shifts': typeof AuthedShiftsRoute
   '/_authed/staff': typeof AuthedStaffRoute
+  '/_authed/users': typeof AuthedUsersRoute
   '/_authed/': typeof AuthedIndexRoute
 }
 export interface FileRouteTypes {
@@ -97,6 +106,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/shifts'
     | '/staff'
+    | '/users'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
@@ -105,6 +115,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/shifts'
     | '/staff'
+    | '/users'
     | '/'
   id:
     | '__root__'
@@ -115,6 +126,7 @@ export interface FileRouteTypes {
     | '/_authed/settings'
     | '/_authed/shifts'
     | '/_authed/staff'
+    | '/_authed/users'
     | '/_authed/'
   fileRoutesById: FileRoutesById
 }
@@ -144,6 +156,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof AuthedIndexRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/users': {
+      id: '/_authed/users'
+      path: '/users'
+      fullPath: '/users'
+      preLoaderRoute: typeof AuthedUsersRouteImport
       parentRoute: typeof AuthedRoute
     }
     '/_authed/staff': {
@@ -190,6 +209,7 @@ interface AuthedRouteChildren {
   AuthedSettingsRoute: typeof AuthedSettingsRoute
   AuthedShiftsRoute: typeof AuthedShiftsRoute
   AuthedStaffRoute: typeof AuthedStaffRoute
+  AuthedUsersRoute: typeof AuthedUsersRoute
   AuthedIndexRoute: typeof AuthedIndexRoute
 }
 
@@ -199,6 +219,7 @@ const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedSettingsRoute: AuthedSettingsRoute,
   AuthedShiftsRoute: AuthedShiftsRoute,
   AuthedStaffRoute: AuthedStaffRoute,
+  AuthedUsersRoute: AuthedUsersRoute,
   AuthedIndexRoute: AuthedIndexRoute,
 }
 
@@ -214,10 +235,11 @@ export const routeTree = rootRouteImport
   ._addFileTypes<FileRouteTypes>()
 
 import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
+import type { startInstance } from './start.ts'
 declare module '@tanstack/react-start' {
   interface Register {
     ssr: true
     router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
   }
 }

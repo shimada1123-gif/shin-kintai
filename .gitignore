@@ -14,3 +14,8 @@ dist/
 # OS / editor
 .DS_Store
 *.log
+
+# Workers のローカル env（service_role を含む）
+.dev.vars
+.dev.vars.local
+!.dev.vars.example
