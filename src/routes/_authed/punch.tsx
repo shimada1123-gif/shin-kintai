@@ -4,7 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import jsQR from 'jsqr'
 import { errText } from '@/lib/errors'
 import { useMe } from '@/lib/me-context'
-import { myAttendanceToday, punch } from '@/lib/server/punch'
+import { myAttendanceToday, punch, type PunchKind } from '@/lib/server/punch'
+import { initSoundUnlock, playPunchError, playPunchSuccess, vibrate } from '@/lib/sound'
 
 export const Route = createFileRoute('/_authed/punch')({
   // 据置QRは /punch?token=... のURLを載せている。標準カメラで読んだ場合はここで受ける。
@@ -57,10 +58,23 @@ function PunchPage() {
   const [manual, setManual] = useState('')
   const [scanning, setScanning] = useState(false)
   const [scanError, setScanError] = useState<string | null>(null)
-  const [result, setResult] = useState<{ ok: boolean; text: string; gps?: string } | null>(null)
+  const [result, setResult] = useState<{
+    ok: boolean
+    text: string
+    kind?: PunchKind
+    at?: string
+    store?: string
+    gps?: string
+  } | null>(null)
   const [punching, setPunching] = useState(false)
+  const [soundOn, setSoundOn] = useState(true)
   // 同じトークンで二度 punch を発火させないためのガード
   const firedRef = useRef<string | null>(null)
+  const soundOnRef = useRef(soundOn)
+  soundOnRef.current = soundOn
+
+  // 自動再生制限の解除（初回のタップ/キー入力で AudioContext を有効化）
+  useEffect(() => initSoundUnlock(), [])
 
   const todayQ = useQuery({ queryKey: ['my_attendance_today'], queryFn: () => myAttendanceToday() })
 
@@ -70,10 +84,23 @@ function PunchPage() {
       return punch({ data: { token, gps_lat: pos?.lat ?? null, gps_lng: pos?.lng ?? null } })
     },
     onSuccess: (r) => {
-      setResult({ ok: true, text: r.message, gps: gpsLabel(r.gps_status) })
+      setResult({
+        ok: true,
+        text: r.message,
+        kind: r.kind,
+        at: r.at,
+        store: r.store_name,
+        gps: gpsLabel(r.gps_status),
+      })
+      if (soundOnRef.current) playPunchSuccess(r.kind)
+      vibrate(50)
       void qc.invalidateQueries({ queryKey: ['my_attendance_today'] })
     },
-    onError: (e) => setResult({ ok: false, text: errText(e, '打刻できませんでした') }),
+    onError: (e) => {
+      setResult({ ok: false, text: errText(e, '打刻できませんでした') })
+      if (soundOnRef.current) playPunchError()
+      vibrate([120, 60, 120])
+    },
     onSettled: () => setPunching(false),
   })
 
@@ -123,23 +150,51 @@ function PunchPage() {
       <div className="page-h">
         <h1>打刻</h1>
         <span className="desc">店舗端末のQRを読むだけ。種別はQRが持っています。</span>
+        <button
+          className="btn sm sound-toggle"
+          aria-label={soundOn ? '効果音をオフにする' : '効果音をオンにする'}
+          onClick={() => setSoundOn((v) => !v)}
+        >
+          {soundOn ? '🔊 音あり' : '🔇 音なし'}
+        </button>
       </div>
 
       <div className="cols">
         <div className="card punch-card">
-          {punching && <p className="note scanned">打刻しています…</p>}
-
-          {result && (
-            <>
-              <p className={result.ok ? 'punch-ok' : 'login-error'} role="alert">
-                {result.text}
-                {result.gps && <span className="punch-gps">{result.gps}</span>}
-              </p>
-              <div className="scan-hint">次の打刻は、店舗端末で新しいQRを出してください。</div>
-            </>
+          {punching && (
+            <div className="punch-result pending" role="status">
+              <div className="big-mark">…</div>
+              <div className="result-msg">打刻しています</div>
+            </div>
           )}
 
-          {!punching && (
+          {result && (
+            <div className={`punch-result ${result.ok ? 'ok' : 'ng'}`} role="alert">
+              <div className="big-mark">{result.ok ? '✓' : '×'}</div>
+              <div className="result-msg">{result.text}</div>
+              {result.ok && (
+                <div className="result-meta">
+                  <span className="mono">{result.at ? hhmm(result.at) : ''}</span>
+                  {result.store && <span> · {result.store}</span>}
+                  {result.gps && <span className="result-gps">{result.gps}</span>}
+                </div>
+              )}
+              <div className="scan-hint">次の打刻は、店舗端末で新しいQRを出してもらってください。</div>
+              <button
+                className="btn sm"
+                onClick={() => {
+                  setResult(null)
+                  setScanError(null)
+                  // 同じQRを読み直したときも（使用済みエラーを）再表示できるようにする
+                  firedRef.current = null
+                }}
+              >
+                もう一度スキャンする
+              </button>
+            </div>
+          )}
+
+          {!punching && !result && (
             <>
               <QrScanner active={scanning} onDetect={handleDetect} onError={handleScanError} />
 

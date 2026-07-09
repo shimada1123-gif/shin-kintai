@@ -1370,37 +1370,77 @@ tr:last-child td {
   margin-top: 8px;
 }
 
-/* モデルB: 据置1画面（上=種別ボタン常時表示 / 下=QR切替） */
+/* モデルB: 据置1画面（上=種別ボタン常時表示 / 下=QR切替）— 和モダン */
+.display-page {
+  background:
+    radial-gradient(circle at 15% 8%, #f1efe9 0, transparent 45%),
+    radial-gradient(circle at 88% 92%, #e6e3da 0, transparent 45%),
+    var(--paper);
+}
+
 .display-wide {
   width: 100%;
-  max-width: 420px;
-  gap: 14px;
+  max-width: 480px;
+  gap: 18px;
+  padding: 32px 30px 28px;
+  border-top: 3px solid var(--gold);
 }
 
 .display-head {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 3px;
+}
+
+.display-store {
+  font-size: 19px;
+  letter-spacing: 0.04em;
 }
 
 .kind-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
 }
 
-/* タブレット据置想定: 大きめのタッチターゲット */
+/* タブレット据置想定: 大きめのタッチターゲット。遠目でも色で種別が分かる */
 .kind-btn {
-  padding: 22px 10px;
-  font-size: 18px;
-  border-radius: 13px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 24px 10px 18px;
+  font-size: 20px;
+  border-radius: 14px;
   opacity: 0.92;
+  transition: transform 0.08s, opacity 0.12s;
+}
+
+.kind-btn:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .kind-btn:disabled {
   opacity: 0.4;
+}
+
+.kind-main {
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+
+.kind-sub {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 400;
+  letter-spacing: 0.22em;
+  opacity: 0.7;
+}
+
+.kind-btn.brkb .kind-sub {
+  color: var(--muted);
 }
 
 /* いま表示中のQRの種別をハイライト */
@@ -1408,7 +1448,7 @@ tr:last-child td {
   opacity: 1;
   outline: 3px solid var(--gold);
   outline-offset: 2px;
-  box-shadow: 0 6px 18px -8px rgb(20 25 40 / 45%);
+  box-shadow: 0 8px 22px -10px rgb(20 25 40 / 50%);
 }
 
 .qr-area {
@@ -1420,16 +1460,27 @@ tr:last-child td {
 
 .display-kind-tag {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.14em;
   color: var(--gold);
-  margin-top: 10px;
+  margin-top: 12px;
 }
 
+/* QRは白地に二重の細枠で「額装」する */
 .qrbox {
   position: relative;
-  margin-top: 4px;
+  margin-top: 6px;
+  box-shadow:
+    0 0 0 1px var(--line),
+    0 0 0 9px #fff,
+    0 0 0 10px var(--line-2),
+    0 14px 34px -16px rgb(20 25 40 / 30%);
+}
+
+.qrring .num {
+  font-size: 22px;
+  min-width: 40px;
 }
 
 .qr-empty canvas {
@@ -1603,6 +1654,83 @@ tr:last-child td {
 
 .st-br .dot {
   background: var(--gold);
+}
+
+/* ---------- 打刻の結果表示（大きく・中央） ---------- */
+.sound-toggle {
+  margin-left: auto;
+  align-self: center;
+}
+
+.punch-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+  padding: 26px 12px 18px;
+}
+
+.big-mark {
+  width: 92px;
+  height: 92px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 52px;
+  font-weight: 900;
+  line-height: 1;
+  color: #fff;
+}
+
+.punch-result.ok .big-mark {
+  background: var(--green);
+  box-shadow: 0 0 0 10px var(--green-soft);
+}
+
+.punch-result.ng .big-mark {
+  background: var(--red);
+  box-shadow: 0 0 0 10px var(--red-soft);
+}
+
+.punch-result.pending .big-mark {
+  background: var(--ink-2);
+  box-shadow: 0 0 0 10px var(--line-2);
+}
+
+.result-msg {
+  font-size: 19px;
+  font-weight: 900;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.punch-result.ng .result-msg {
+  font-size: 16px;
+  color: var(--red);
+}
+
+.result-meta {
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.result-meta .mono {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.result-gps {
+  display: inline-block;
+  margin-left: 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: var(--gold-soft);
+  color: #7a5a10;
 }
 
 /* ---------- 設定 ---------- */

@@ -19,7 +19,10 @@ export function pgErrorToJa(e: PostgrestError | Error | null | undefined, fallba
   if (/Failed to fetch|NetworkError/i.test(message)) {
     return 'ネットワークに接続できません。通信環境を確認してください。'
   }
-  return `${fallback}（${message}）`
+  // コード付き（=PostgREST由来の英語）だけ fallback で包む。
+  // Server Function が投げた日本語 Error はそのまま表示する（二重ラップ防止）。
+  if (code) return `${fallback}（${message}）`
+  return message || fallback
 }
 
 export function errText(e: unknown, fallback = '処理に失敗しました'): string {

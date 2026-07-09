@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createFileRoute, useSearch } from '@tanstack/react-router'
 import QRCode from 'qrcode'
 import { issuePunchToken, type PunchKind } from '@/lib/server/punch'
+import { initSoundUnlock, playKindTone } from '@/lib/sound'
 
 export const Route = createFileRoute('/display/$storeId')({
   validateSearch: (search: Record<string, unknown>) => ({ sig: String(search.sig ?? '') }),
@@ -24,6 +25,13 @@ const KIND_CLASS: Record<PunchKind, string> = {
   clock_out: 'outb',
 }
 
+const KIND_SUB: Record<PunchKind, string> = {
+  clock_in: 'CLOCK IN',
+  break_start: 'BREAK',
+  break_end: 'RESUME',
+  clock_out: 'CLOCK OUT',
+}
+
 /**
  * モデルB（レジ横の据置端末で開きっぱなしにする1画面）。
  * 上部の種別ボタンは常時表示。押すたびに前のQRを破棄して
@@ -40,8 +48,12 @@ function DisplayPage() {
   const [issuing, setIssuing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // 据置端末は常時音あり（初回タップで自動再生制限を解除）
+  useEffect(() => initSoundUnlock(), [])
+
   // ボタン押下 = 前のQRを破棄して新しいワンタイムQRに差し替える
   const issue = async (kind: PunchKind) => {
+    playKindTone(kind)
     setIssuing(true)
     setError(null)
     try {
@@ -101,7 +113,8 @@ function DisplayPage() {
               disabled={issuing}
               onClick={() => void issue(k)}
             >
-              {KIND_LABEL[k]}
+              <span className="kind-main">{KIND_LABEL[k]}</span>
+              <span className="kind-sub">{KIND_SUB[k]}</span>
             </button>
           ))}
         </div>
