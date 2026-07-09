@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { NumberInput } from '@/components/NumberInput'
 import { StaffEditModal } from '@/components/StaffEditModal'
 import { errText } from '@/lib/errors'
+import { geocodeAddress } from '@/lib/geocode'
 import { useMe } from '@/lib/me-context'
 import { usePermissions } from '@/lib/perm'
 import {
@@ -482,6 +483,31 @@ function StoreForm({
     (store?.gps_policy as 'flag' | 'block') ?? 'flag',
   )
   const [error, setError] = useState<string | null>(null)
+  // 住所はDBに保存しない（座標取得の補助のみ。保存するなら別途マイグレーション）
+  const [address, setAddress] = useState('')
+  const [geoMsg, setGeoMsg] = useState<string | null>(null)
+  const [geocoding, setGeocoding] = useState(false)
+
+  const lookupAddress = async () => {
+    setGeoMsg(null)
+    setGeocoding(true)
+    try {
+      const r = await geocodeAddress(address)
+      if (!r) {
+        setGeoMsg(
+          '住所から座標が見つかりませんでした。住所を確認するか、緯度経度を直接入力してください。',
+        )
+        return
+      }
+      setLat(r.lat)
+      setLng(r.lng)
+      setGeoMsg(`座標を取得しました（緯度 ${r.lat}, 経度 ${r.lng}）: ${r.label}`)
+    } catch {
+      setGeoMsg('座標の取得に失敗しました。通信環境を確認するか、緯度経度を直接入力してください。')
+    } finally {
+      setGeocoding(false)
+    }
+  }
 
   const save = useMutation({
     mutationFn: () =>
@@ -529,6 +555,25 @@ function StoreForm({
             ))}
           </select>
         </label>
+        <div className="field addr-field">
+          <span>住所（座標の自動取得用・保存はされません）</span>
+          <div className="addr-row">
+            <input
+              value={address}
+              placeholder="例）東京都渋谷区道玄坂2-1"
+              onChange={(e) => setAddress(e.target.value)}
+            />
+            <button
+              type="button"
+              className="btn sm"
+              disabled={!address.trim() || geocoding}
+              onClick={() => void lookupAddress()}
+            >
+              {geocoding ? '取得中…' : '住所から座標を取得'}
+            </button>
+          </div>
+          {geoMsg && <p className="note geo-msg">{geoMsg}</p>}
+        </div>
         <label className="field">
           <span>緯度 (lat)</span>
           <NumberInput decimal value={lat} onChange={setLat} placeholder="35.657" aria-label="緯度" />
@@ -549,6 +594,10 @@ function StoreForm({
           </select>
         </label>
       </div>
+      <p className="note">
+        緯度・経度は店舗の位置（GPS打刻の中心）です。住所を入れて「住所から座標を取得」を
+        押すと自動入力されます。ジオフェンス半径(m)の範囲内での打刻が「圏内」になります。
+      </p>
       <div className="form-actions">
         <button type="submit" className="btn pri sm" disabled={save.isPending}>
           {save.isPending ? '保存中…' : '保存'}

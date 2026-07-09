@@ -2085,6 +2085,37 @@ input[type='datetime-local'] {
   min-width: 180px;
 }
 
+/* ---------- 住所→座標の自動取得（店舗フォーム） ---------- */
+.addr-field {
+  grid-column: 1 / -1; /* form-grid 内で全幅 */
+}
+
+.addr-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.addr-row input {
+  flex: 1;
+  min-width: 200px;
+  font-family: var(--jp);
+  font-size: 13px;
+  color: var(--ink);
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--card);
+}
+
+.addr-row .btn {
+  white-space: nowrap;
+}
+
+.geo-msg {
+  margin: 6px 0 0;
+}
+
 /* ---------- 据置URL（設定画面・常時表示） ---------- */
 .url-block {
   display: flex;
