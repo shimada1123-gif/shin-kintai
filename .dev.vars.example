@@ -2,3 +2,8 @@
 # 実値はコミットしないこと。本番は `wrangler secret put SUPABASE_SERVICE_ROLE_KEY`。
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
+
+# QR表示トークンの署名鍵（32バイトのランダム値をbase64化）
+# 生成: [Convert]::ToBase64String((New-Object byte[] 32 | % { [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($_); $_ }))
+# 本番は `wrangler secret put QR_DISPLAY_SECRET`
+QR_DISPLAY_SECRET=

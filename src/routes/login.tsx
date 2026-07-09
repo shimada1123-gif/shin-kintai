@@ -5,8 +5,20 @@ import { getSupabase } from '@/lib/auth/supabase-client'
 import { useAuth } from '@/lib/auth'
 
 export const Route = createFileRoute('/login')({
+  validateSearch: (s: Record<string, unknown>) => ({
+    redirect: typeof s.redirect === 'string' && s.redirect ? s.redirect : undefined,
+  }),
   component: LoginPage,
 })
+
+/**
+ * ログイン後の戻り先。オープンリダイレクト防止のため、
+ * サイト内の相対パス（/ で始まり // ではない）だけを許可する。
+ */
+function safeRedirect(target: string | undefined): string {
+  if (target && target.startsWith('/') && !target.startsWith('//')) return target
+  return '/'
+}
 
 /** Supabase の英語メッセージを、現場で意味の通る日本語にする */
 function toJapanese(error: AuthError): string {
@@ -31,13 +43,14 @@ function toJapanese(error: AuthError): string {
 
 function LoginPage() {
   const { session, loading: authLoading } = useAuth()
+  const { redirect } = Route.useSearch()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
   if (authLoading) return <CenteredNote>読み込み中…</CenteredNote>
-  if (session) return <Navigate to="/" />
+  if (session) return <Navigate to={safeRedirect(redirect)} />
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()

@@ -10,6 +10,7 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   { to: '/', label: 'ダッシュボード', roles: ['owner', 'area_manager', 'store_manager', 'staff'] },
+  { to: '/punch', label: '打刻', roles: ['owner', 'area_manager', 'store_manager', 'staff'] },
   { to: '/attendance', label: '勤怠', roles: ['owner', 'area_manager', 'store_manager', 'staff'] },
   { to: '/shifts', label: 'シフト', roles: ['owner', 'area_manager', 'store_manager'] },
   { to: '/staff', label: 'スタッフ', roles: ['owner', 'area_manager', 'store_manager'] },
@@ -42,7 +43,13 @@ export function AppShell() {
   const initial = displayName.slice(0, 1).toUpperCase()
 
   return (
-    <div className="shell">
+    <div className="shell-root">
+      {me.testMode && (
+        <div className="testmode-banner" role="status">
+          テストモード — デモ打刻が有効です。実勤怠とは分離されています。
+        </div>
+      )}
+      <div className="shell">
       <aside className="side">
         <div className="brand">
           <Noren />
@@ -93,6 +100,7 @@ export function AppShell() {
 
         <div className="wrap">
           <Outlet />
+        </div>
         </div>
       </div>
     </div>

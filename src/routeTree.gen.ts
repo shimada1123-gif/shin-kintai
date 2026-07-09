@@ -12,11 +12,13 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as AuthedIndexRouteImport } from './routes/_authed/index'
+import { Route as DisplayStoreIdRouteImport } from './routes/display.$storeId'
 import { Route as AuthedUsersRouteImport } from './routes/_authed/users'
 import { Route as AuthedStaffRouteImport } from './routes/_authed/staff'
 import { Route as AuthedShiftsRouteImport } from './routes/_authed/shifts'
 import { Route as AuthedSettingsRouteImport } from './routes/_authed/settings'
 import { Route as AuthedReportsRouteImport } from './routes/_authed/reports'
+import { Route as AuthedPunchRouteImport } from './routes/_authed/punch'
 import { Route as AuthedAttendanceRouteImport } from './routes/_authed/attendance'
 
 const LoginRoute = LoginRouteImport.update({
@@ -32,6 +34,11 @@ const AuthedIndexRoute = AuthedIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AuthedRoute,
+} as any)
+const DisplayStoreIdRoute = DisplayStoreIdRouteImport.update({
+  id: '/display/$storeId',
+  path: '/display/$storeId',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AuthedUsersRoute = AuthedUsersRouteImport.update({
   id: '/users',
@@ -58,6 +65,11 @@ const AuthedReportsRoute = AuthedReportsRouteImport.update({
   path: '/reports',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedPunchRoute = AuthedPunchRouteImport.update({
+  id: '/punch',
+  path: '/punch',
+  getParentRoute: () => AuthedRoute,
+} as any)
 const AuthedAttendanceRoute = AuthedAttendanceRouteImport.update({
   id: '/attendance',
   path: '/attendance',
@@ -68,20 +80,24 @@ export interface FileRoutesByFullPath {
   '/': typeof AuthedIndexRoute
   '/login': typeof LoginRoute
   '/attendance': typeof AuthedAttendanceRoute
+  '/punch': typeof AuthedPunchRoute
   '/reports': typeof AuthedReportsRoute
   '/settings': typeof AuthedSettingsRoute
   '/shifts': typeof AuthedShiftsRoute
   '/staff': typeof AuthedStaffRoute
   '/users': typeof AuthedUsersRoute
+  '/display/$storeId': typeof DisplayStoreIdRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/attendance': typeof AuthedAttendanceRoute
+  '/punch': typeof AuthedPunchRoute
   '/reports': typeof AuthedReportsRoute
   '/settings': typeof AuthedSettingsRoute
   '/shifts': typeof AuthedShiftsRoute
   '/staff': typeof AuthedStaffRoute
   '/users': typeof AuthedUsersRoute
+  '/display/$storeId': typeof DisplayStoreIdRoute
   '/': typeof AuthedIndexRoute
 }
 export interface FileRoutesById {
@@ -89,11 +105,13 @@ export interface FileRoutesById {
   '/_authed': typeof AuthedRouteWithChildren
   '/login': typeof LoginRoute
   '/_authed/attendance': typeof AuthedAttendanceRoute
+  '/_authed/punch': typeof AuthedPunchRoute
   '/_authed/reports': typeof AuthedReportsRoute
   '/_authed/settings': typeof AuthedSettingsRoute
   '/_authed/shifts': typeof AuthedShiftsRoute
   '/_authed/staff': typeof AuthedStaffRoute
   '/_authed/users': typeof AuthedUsersRoute
+  '/display/$storeId': typeof DisplayStoreIdRoute
   '/_authed/': typeof AuthedIndexRoute
 }
 export interface FileRouteTypes {
@@ -102,37 +120,44 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/attendance'
+    | '/punch'
     | '/reports'
     | '/settings'
     | '/shifts'
     | '/staff'
     | '/users'
+    | '/display/$storeId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
     | '/attendance'
+    | '/punch'
     | '/reports'
     | '/settings'
     | '/shifts'
     | '/staff'
     | '/users'
+    | '/display/$storeId'
     | '/'
   id:
     | '__root__'
     | '/_authed'
     | '/login'
     | '/_authed/attendance'
+    | '/_authed/punch'
     | '/_authed/reports'
     | '/_authed/settings'
     | '/_authed/shifts'
     | '/_authed/staff'
     | '/_authed/users'
+    | '/display/$storeId'
     | '/_authed/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   AuthedRoute: typeof AuthedRouteWithChildren
   LoginRoute: typeof LoginRoute
+  DisplayStoreIdRoute: typeof DisplayStoreIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -157,6 +182,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof AuthedIndexRouteImport
       parentRoute: typeof AuthedRoute
+    }
+    '/display/$storeId': {
+      id: '/display/$storeId'
+      path: '/display/$storeId'
+      fullPath: '/display/$storeId'
+      preLoaderRoute: typeof DisplayStoreIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_authed/users': {
       id: '/_authed/users'
@@ -193,6 +225,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedReportsRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/punch': {
+      id: '/_authed/punch'
+      path: '/punch'
+      fullPath: '/punch'
+      preLoaderRoute: typeof AuthedPunchRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/attendance': {
       id: '/_authed/attendance'
       path: '/attendance'
@@ -205,6 +244,7 @@ declare module '@tanstack/react-router' {
 
 interface AuthedRouteChildren {
   AuthedAttendanceRoute: typeof AuthedAttendanceRoute
+  AuthedPunchRoute: typeof AuthedPunchRoute
   AuthedReportsRoute: typeof AuthedReportsRoute
   AuthedSettingsRoute: typeof AuthedSettingsRoute
   AuthedShiftsRoute: typeof AuthedShiftsRoute
@@ -215,6 +255,7 @@ interface AuthedRouteChildren {
 
 const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedAttendanceRoute: AuthedAttendanceRoute,
+  AuthedPunchRoute: AuthedPunchRoute,
   AuthedReportsRoute: AuthedReportsRoute,
   AuthedSettingsRoute: AuthedSettingsRoute,
   AuthedShiftsRoute: AuthedShiftsRoute,
@@ -229,6 +270,7 @@ const AuthedRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   AuthedRoute: AuthedRouteWithChildren,
   LoginRoute: LoginRoute,
+  DisplayStoreIdRoute: DisplayStoreIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

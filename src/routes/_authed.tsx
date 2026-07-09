@@ -1,4 +1,4 @@
-import { createFileRoute, Navigate } from '@tanstack/react-router'
+import { createFileRoute, Navigate, useRouterState } from '@tanstack/react-router'
 import { AppShell } from '@/components/AppShell'
 import { useAuth } from '@/lib/auth'
 import { MeProvider, useMe } from '@/lib/me-context'
@@ -9,10 +9,12 @@ export const Route = createFileRoute('/_authed')({
 
 function AuthedLayout() {
   const { session, loading } = useAuth()
+  // QRから /punch?token=... を開いた未ログイン者を、ログイン後に元のURLへ戻す
+  const href = useRouterState({ select: (s) => s.location.href })
 
   // 初回セッション解決前にリダイレクトすると、リロードのたびに /login へ飛んでしまう
   if (loading) return <div className="centered-note">読み込み中…</div>
-  if (!session) return <Navigate to="/login" />
+  if (!session) return <Navigate to="/login" search={{ redirect: href }} />
 
   return (
     <MeProvider>

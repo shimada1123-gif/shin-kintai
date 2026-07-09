@@ -1,7 +1,16 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "shin-kintai",
+  "name": "kintai",
   "compatibility_date": "2025-09-24",
   "compatibility_flags": ["nodejs_compat"],
-  "main": "@tanstack/react-start/server-entry"
+  "main": "@tanstack/react-start/server-entry",
+  "workers_dev": true,
+
+  // 公開値のみ。anon key はブラウザに配られる公開鍵なのでコミット可。
+  // service_role / QR_DISPLAY_SECRET は絶対にここへ書かず wrangler secret put で入れる。
+  "vars": {
+    "VITE_SUPABASE_URL": "https://phwhhmqbmgcrdjqpjmsh.supabase.co",
+    "VITE_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBod2hobXFibWdjcmRqcXBqbXNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1ODU0NzcsImV4cCI6MjA5OTE2MTQ3N30.DNwWWLmsHgMlelVEIwYE3qrcg_VnEfD0q9_tlSk0GAY",
+    "SUPABASE_URL": "https://phwhhmqbmgcrdjqpjmsh.supabase.co"
+  }
 }

@@ -112,6 +112,7 @@ export type Database = {
           gps_lng: number | null
           gps_status: string
           id: string
+          is_demo: boolean
           source: string
           staff_id: string
           store_id: string
@@ -125,6 +126,7 @@ export type Database = {
           gps_lng?: number | null
           gps_status?: string
           id?: string
+          is_demo?: boolean
           source?: string
           staff_id: string
           store_id: string
@@ -138,6 +140,7 @@ export type Database = {
           gps_lng?: number | null
           gps_status?: string
           id?: string
+          is_demo?: boolean
           source?: string
           staff_id?: string
           store_id?: string
@@ -729,6 +732,7 @@ export type Database = {
       app_is_member: { Args: { tid: string }; Returns: boolean }
       app_role: { Args: { tid: string }; Returns: string }
       app_staff_id: { Args: { tid: string }; Returns: string }
+      app_tenant_test_mode: { Args: { tid: string }; Returns: boolean }
       seed_role_permissions: { Args: { tid: string }; Returns: undefined }
     }
     Enums: {

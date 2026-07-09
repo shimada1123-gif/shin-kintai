@@ -3,9 +3,9 @@
 // supabase-admin.server.ts は handler の中でしか参照しないため、クライアント側には届かない。
 // （誤って client に混ざれば、build 時の import-protection が **/*.server.* を弾く）
 import { createServerFn } from '@tanstack/react-start'
-import { getRequestHeader } from '@tanstack/react-start/server'
 import { getAdminClient } from '@/lib/supabase-admin.server'
 import type { Role } from '@/lib/me-context'
+import { requireCaller } from './caller'
 import {
   assert,
   canAssignRole,
@@ -24,39 +24,6 @@ export interface UserRow {
   scopeAreaId: string | null
   scopeStoreId: string | null
   status: 'active' | 'inactive'
-}
-
-/* ------------------------------------------------------------------ */
-/* 呼び出し元の同定 — すべての Server Function の最初に必ず通す           */
-/* ------------------------------------------------------------------ */
-
-async function requireCaller(): Promise<Caller> {
-  const authHeader = getRequestHeader('authorization')
-  const token = authHeader?.replace(/^Bearer\s+/i, '')
-  assert(token, 'ログインが必要です。')
-
-  const admin = getAdminClient()
-
-  // トークンの署名・失効を Supabase に検証させる（クライアントの自己申告を信用しない）
-  const { data: userData, error: userErr } = await admin.auth.getUser(token)
-  assert(!userErr && userData.user, 'セッションが無効です。再度ログインしてください。')
-
-  const { data: membership, error: memErr } = await admin
-    .from('memberships')
-    .select('tenant_id, role, scope_area_id, scope_store_id')
-    .eq('user_id', userData.user.id)
-    .maybeSingle()
-
-  assert(!memErr, 'membership の取得に失敗しました。')
-  assert(membership, 'このアカウントは、どのテナントにも所属していません。')
-
-  return {
-    userId: userData.user.id,
-    tenantId: membership.tenant_id,
-    role: membership.role as Role,
-    scopeAreaId: membership.scope_area_id,
-    scopeStoreId: membership.scope_store_id,
-  }
 }
 
 /** ユーザー管理そのものを行える role か */

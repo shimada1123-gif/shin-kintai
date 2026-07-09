@@ -15,7 +15,10 @@ dist/
 .DS_Store
 *.log
 
-# Workers のローカル env（service_role を含む）
+# Workers のローカル env（service_role / QR_DISPLAY_SECRET を含む）
+# サフィックス付きの一時ファイル（.qrtmp 等）も一括で除外する。
 .dev.vars
-.dev.vars.local
+.dev.vars.*
+
+# 否定ルールは除外パターンより後ろに置く（git は最後にマッチした行が勝つ）
 !.dev.vars.example

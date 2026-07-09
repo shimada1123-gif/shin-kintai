@@ -16,6 +16,8 @@ export interface MeContext {
   staffName: string | null
   stores: Tables<'stores'>[]
   areas: Tables<'areas'>[]
+  /** tenants.settings.test_mode。ON のあいだデモ打刻の導線を出す。 */
+  testMode: boolean
 }
 
 /** ヘッダーに出す「SCOPE」表示: 全社 / エリア名 / 店舗名 */
@@ -54,7 +56,7 @@ async function fetchMe(userId: string): Promise<MeContext> {
 
   // stores / areas は RLS のスコープに任せて素直に select する
   const [tenantRes, storesRes, areasRes, staffRes] = await Promise.all([
-    supabase.from('tenants').select('name').eq('id', membership.tenant_id).maybeSingle(),
+    supabase.from('tenants').select('name, settings').eq('id', membership.tenant_id).maybeSingle(),
     supabase.from('stores').select('*').order('name'),
     supabase.from('areas').select('*').order('name'),
     membership.staff_id
@@ -76,6 +78,7 @@ async function fetchMe(userId: string): Promise<MeContext> {
     staffName: staffRes.data?.full_name ?? null,
     stores: storesRes.data ?? [],
     areas: areasRes.data ?? [],
+    testMode: ((tenantRes.data?.settings ?? {}) as { test_mode?: boolean }).test_mode === true,
   }
 }
 
