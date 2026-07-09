@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SHIN 勤怠 — モック</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#1A2233;          /* 藍墨 sidebar / text */
+    --ink-2:#3A4557;
+    --indigo:#22345B;       /* 藍 primary */
+    --indigo-deep:#182642;
+    --paper:#EBE9E3;        /* cool paper canvas */
+    --card:#FFFFFF;
+    --line:#D9D6CE;         /* hairline */
+    --line-2:#E7E4DC;
+    --gold:#CE9526;         /* 山吹 accent, restrained */
+    --gold-soft:#F3E4C0;
+    --green:#2E7D5B;        /* 出勤中 / on-time */
+    --green-soft:#DBEEE3;
+    --red:#BC4A32;          /* 遅刻 / 圏外 */
+    --red-soft:#F3DDD5;
+    --muted:#8A8577;
+    --radius:7px;
+    --mono:"Space Mono",ui-monospace,monospace;
+    --jp:"Zen Kaku Gothic New",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    font-family:var(--jp);
+    background:var(--paper);
+    color:var(--ink);
+    display:flex;
+    -webkit-font-smoothing:antialiased;
+    font-size:14px;
+  }
+  ::selection{background:var(--gold-soft)}
+
+  /* ---------- Sidebar ---------- */
+  .side{
+    width:236px;flex:0 0 236px;
+    background:var(--ink);
+    color:#C9CEDA;
+    display:flex;flex-direction:column;
+    height:100vh;position:sticky;top:0;
+  }
+  .brand{padding:20px 20px 16px;border-bottom:1px solid #2A3346}
+  .brand .noren{display:flex;gap:3px;margin-bottom:12px}
+  .brand .noren i{height:5px;flex:1;border-radius:2px;background:#2E3A52}
+  .brand .noren i:nth-child(2){background:var(--gold)}
+  .brand h1{font-size:19px;font-weight:900;color:#fff;margin:0;letter-spacing:.02em}
+  .brand h1 span{color:var(--gold)}
+  .brand .sub{font-size:11px;color:#7B8499;margin-top:2px;letter-spacing:.14em;font-family:var(--mono)}
+
+  .role-pick{padding:14px 16px;border-bottom:1px solid #2A3346}
+  .role-pick .lab{font-size:10px;letter-spacing:.16em;color:#6E7791;margin-bottom:8px;font-family:var(--mono)}
+  .role-btns{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+  .role-btns button{
+    font-family:var(--jp);font-size:12px;font-weight:500;
+    padding:7px 4px;border-radius:5px;cursor:pointer;
+    background:#232C40;color:#AEB6C7;border:1px solid transparent;transition:.12s;
+  }
+  .role-btns button:hover{background:#2A3346}
+  .role-btns button.on{background:var(--gold);color:#241B06;font-weight:700}
+
+  nav{padding:10px 12px;flex:1;overflow:auto}
+  nav .navlab{font-size:10px;letter-spacing:.16em;color:#5E6782;padding:8px 8px 6px;font-family:var(--mono)}
+  nav a{
+    display:flex;align-items:center;gap:11px;
+    padding:9px 11px;border-radius:6px;color:#B7BECD;
+    cursor:pointer;font-size:13.5px;font-weight:500;margin-bottom:2px;position:relative;
+  }
+  nav a svg{width:17px;height:17px;flex:0 0 17px;stroke:currentColor;opacity:.85}
+  nav a:hover{background:#232C40;color:#fff}
+  nav a.on{background:var(--indigo);color:#fff}
+  nav a.on::before{content:"";position:absolute;left:-12px;top:6px;bottom:6px;width:3px;background:var(--gold);border-radius:0 3px 3px 0}
+  .side-foot{padding:14px 18px;border-top:1px solid #2A3346;font-size:11px;color:#6E7791;font-family:var(--mono)}
+
+  /* ---------- Main ---------- */
+  .main{flex:1;min-width:0;height:100vh;overflow:auto}
+  .topbar{
+    position:sticky;top:0;z-index:5;
+    background:rgba(235,233,227,.86);backdrop-filter:blur(8px);
+    border-bottom:1px solid var(--line);
+    padding:13px 30px;display:flex;align-items:center;gap:18px;
+  }
+  .scope{display:flex;align-items:center;gap:9px}
+  .scope .tag{font-size:11px;font-family:var(--mono);color:var(--muted);letter-spacing:.1em}
+  .scope select{
+    font-family:var(--jp);font-size:13px;font-weight:700;color:var(--ink);
+    border:1px solid var(--line);background:var(--card);border-radius:6px;padding:6px 10px;cursor:pointer;
+  }
+  .topbar .clock{margin-left:auto;font-family:var(--mono);font-size:14px;color:var(--ink-2);letter-spacing:.02em}
+  .topbar .clock b{color:var(--ink);font-size:16px}
+  .who{display:flex;align-items:center;gap:9px;padding-left:16px;border-left:1px solid var(--line)}
+  .who .av{width:30px;height:30px;border-radius:50%;background:var(--indigo);color:#fff;display:grid;place-items:center;font-weight:700;font-size:13px}
+  .who .nm{font-size:12.5px;font-weight:700;line-height:1.2}
+  .who .rl{font-size:10.5px;color:var(--muted)}
+
+  .wrap{padding:26px 30px 60px;max-width:1180px}
+  .page-h{display:flex;align-items:flex-end;gap:14px;margin-bottom:20px}
+  .page-h h2{font-size:23px;font-weight:900;margin:0;letter-spacing:.01em}
+  .page-h .desc{font-size:12.5px;color:var(--muted);padding-bottom:3px}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.18em;color:var(--gold);font-weight:700;text-transform:uppercase;margin-bottom:5px}
+
+  /* cards / bits */
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius)}
+  .grid{display:grid;gap:16px}
+  .kpis{grid-template-columns:repeat(4,1fr)}
+  .kpi{padding:16px 17px}
+  .kpi .k{font-size:11px;color:var(--muted);letter-spacing:.05em;margin-bottom:9px}
+  .kpi .v{font-family:var(--mono);font-size:27px;font-weight:700;line-height:1;color:var(--ink)}
+  .kpi .v small{font-size:14px;color:var(--muted);margin-left:3px}
+  .kpi .d{font-size:11px;margin-top:8px;color:var(--green)}
+  .kpi .d.warn{color:var(--red)}
+
+  .sec-h{display:flex;align-items:center;gap:10px;margin:26px 0 12px}
+  .sec-h h3{font-size:15px;font-weight:700;margin:0}
+  .sec-h .rule{flex:1;height:1px;background:var(--line)}
+  .sec-h .cnt{font-family:var(--mono);font-size:11px;color:var(--muted)}
+
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;font-size:10.5px;letter-spacing:.1em;color:var(--muted);font-weight:700;padding:11px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
+  td{padding:11px 14px;border-bottom:1px solid var(--line-2);vertical-align:middle}
+  tr:last-child td{border-bottom:none}
+  tbody tr:hover{background:#FAF9F6}
+  .mono{font-family:var(--mono)}
+  .yen::before{content:"¥";color:var(--muted);margin-right:1px}
+
+  .badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;line-height:1.5;white-space:nowrap}
+  .b-emp{background:#E5E9F2;color:var(--indigo)}       /* 社員 */
+  .b-part{background:#EAF0EA;color:#3B6E4C}            /* パート */
+  .b-arb{background:var(--gold-soft);color:#7A5A10}    /* アルバイト */
+  .b-out{background:#EDE7E2;color:#7A6A5A}             /* 業務委託 */
+  .st{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700}
+  .dot{width:8px;height:8px;border-radius:50%}
+  .st-in .dot{background:var(--green);box-shadow:0 0 0 3px var(--green-soft)}
+  .st-in{color:var(--green)}
+  .st-br .dot{background:var(--gold)}
+  .st-br{color:#9A6E12}
+  .st-out .dot{background:#B4AFA2}
+  .st-out{color:var(--muted)}
+  .st-plan .dot{background:transparent;border:2px solid var(--line)}
+  .st-plan{color:var(--muted)}
+
+  .flag{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;color:var(--red);background:var(--red-soft);padding:2px 7px;border-radius:5px}
+  .newbie{display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:900;color:#241B06;background:var(--gold);border-radius:4px;padding:1px 5px;margin-left:6px}
+
+  /* punch strip (signature) */
+  .strip{position:relative;height:16px;background:#F1EFEA;border-radius:4px;overflow:hidden;min-width:220px}
+  .strip .seg{position:absolute;top:0;bottom:0}
+  .strip .work{background:var(--green);opacity:.82}
+  .strip .brk{background:repeating-linear-gradient(45deg,var(--gold),var(--gold) 3px,#E3B953 3px,#E3B953 6px)}
+
+  .btn{font-family:var(--jp);font-size:13px;font-weight:700;border-radius:6px;padding:9px 16px;cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--ink);transition:.12s}
+  .btn:hover{border-color:#BBB6AA}
+  .btn.pri{background:var(--indigo);color:#fff;border-color:var(--indigo)}
+  .btn.pri:hover{background:var(--indigo-deep)}
+  .btn.gold{background:var(--gold);color:#241B06;border-color:var(--gold)}
+  .btn.sm{padding:6px 11px;font-size:12px}
+  .btn:focus-visible{outline:3px solid var(--gold-soft);outline-offset:1px}
+
+  .lockcell{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:12px}
+  .lockcell svg{width:14px;height:14px;stroke:var(--muted)}
+
+  .note{font-size:12px;color:var(--muted);line-height:1.6}
+  .pill-row{display:flex;flex-wrap:wrap;gap:7px}
+  .pill{font-size:12px;font-weight:500;padding:5px 11px;border-radius:20px;border:1px solid var(--line);background:var(--card)}
+  .pill.on{background:var(--indigo);color:#fff;border-color:var(--indigo)}
+
+  /* checkbox grid */
+  .cbx{width:19px;height:19px;border-radius:5px;border:1.5px solid #C5C1B6;background:#fff;cursor:pointer;display:inline-grid;place-items:center;transition:.1s}
+  .cbx.on{background:var(--green);border-color:var(--green)}
+  .cbx.on::after{content:"";width:5px;height:9px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg) translateY(-1px)}
+  .cbx.lock{background:#EEEBE4;border-color:#DAD6CC;cursor:not-allowed;opacity:.7}
+  .cbx.lock.on{background:#B7B2A6;border-color:#B7B2A6}
+
+  /* phone frame */
+  .phone{width:300px;background:#0E1526;border-radius:30px;padding:11px;box-shadow:0 24px 50px -20px rgba(20,25,40,.55);flex:0 0 auto}
+  .phone .screen{background:var(--paper);border-radius:22px;overflow:hidden;height:560px;display:flex;flex-direction:column}
+  .phone .pnav{background:var(--indigo);color:#fff;padding:14px 16px;font-weight:700;font-size:14px;display:flex;justify-content:space-between;align-items:center}
+  .phone .pnav .mn{font-family:var(--mono);font-size:12px;color:#B9C4DB}
+  .phone .pbody{padding:18px 16px;flex:1;display:flex;flex-direction:column}
+  .bigclock{font-family:var(--mono);font-weight:700;font-size:40px;text-align:center;letter-spacing:.02em;color:var(--ink);margin:6px 0 2px}
+  .bigdate{text-align:center;font-size:12px;color:var(--muted);margin-bottom:14px}
+  .gps{display:flex;align-items:center;justify-content:center;gap:7px;font-size:12px;font-weight:700;padding:8px;border-radius:8px;margin-bottom:14px}
+  .gps.ok{background:var(--green-soft);color:var(--green)}
+  .gps.flag{background:var(--red-soft);color:var(--red)}
+  .punchbtns{display:grid;gap:9px;margin-top:auto}
+  .pbtn{padding:15px;border-radius:11px;border:none;font-family:var(--jp);font-weight:900;font-size:16px;cursor:pointer;color:#fff}
+  .pbtn.inb{background:var(--green)}
+  .pbtn.outb{background:var(--indigo)}
+  .pbtn.brkb{background:var(--card);color:var(--ink);border:1.5px solid var(--line);font-size:14px;font-weight:700}
+  .scan-hint{text-align:center;font-size:11px;color:var(--muted);margin-top:12px}
+
+  /* QR */
+  .qrbox{width:190px;height:190px;background:#fff;padding:12px;border-radius:12px;border:1px solid var(--line);position:relative}
+  .qr{display:grid;width:100%;height:100%;grid-template-columns:repeat(21,1fr);grid-template-rows:repeat(21,1fr)}
+  .qr i{background:transparent}
+  .qr i.f{background:var(--ink)}
+  .qrring{display:flex;align-items:center;gap:10px;margin-top:14px}
+  .qrring .num{font-family:var(--mono);font-weight:700;font-size:15px;color:var(--gold);min-width:30px}
+  .bar{height:6px;background:#E4E1DA;border-radius:4px;flex:1;overflow:hidden}
+  .bar i{display:block;height:100%;background:var(--gold);transition:width .95s linear}
+
+  .cols{display:flex;gap:20px;flex-wrap:wrap}
+  .toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;padding:12px 20px;border-radius:9px;font-size:13px;font-weight:700;opacity:0;pointer-events:none;transition:.25s;z-index:50;box-shadow:0 14px 30px -10px rgba(0,0,0,.4)}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .toast .g{color:var(--gold)}
+
+  .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:11.5px;color:var(--ink-2);margin-top:10px}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .sw{width:12px;height:12px;border-radius:3px;display:inline-block}
+
+  .cell{padding:8px;border-radius:6px;font-size:11.5px;font-weight:700;text-align:center;line-height:1.35;border:1px solid transparent}
+  .c-emp{background:#E5E9F2;color:var(--indigo)}
+  .c-part{background:#EAF0EA;color:#3B6E4C}
+  .c-arb{background:var(--gold-soft);color:#7A5A10}
+  .c-new{background:#fff;color:var(--gold);border:1.5px dashed var(--gold)}
+  .c-empty{background:#F4F2EC;color:#B7B2A6;border:1px dashed var(--line)}
+
+  /* ---- shift builder ---- */
+  .seg{display:inline-flex;background:#E4E2DB;border-radius:9px;padding:3px;gap:2px}
+  .seg button{background:none;border:none;font-family:var(--jp);font-weight:700;font-size:12.5px;color:var(--muted);padding:7px 14px;border-radius:7px;cursor:pointer}
+  .seg button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  .dtype .b{display:inline-block;font-size:10px;font-weight:900;padding:1px 7px;border-radius:5px;letter-spacing:.05em}
+  .dt-w{background:#E9E7E0;color:#6E6A5A} .dt-fri{background:#E5E9F2;color:var(--indigo)}
+  .dt-sat{background:#DCE7F2;color:#2F5C8A} .dt-sun{background:var(--red-soft);color:var(--red)} .dt-hol{background:var(--gold-soft);color:#7A5A10}
+  .pool{display:flex;flex-wrap:wrap;gap:8px}
+  .chip-staff{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;padding:7px 12px;border-radius:9px;cursor:grab;user-select:none;border:1px solid transparent;touch-action:none;transition:transform .05s}
+  .chip-staff:active{cursor:grabbing}
+  .chip-staff .t{font-family:var(--mono);font-size:10px;font-weight:400;opacity:.7}
+  .cs-emp{background:#E5E9F2;color:var(--indigo);border-color:#CDD7EA}
+  .cs-part{background:#EAF0EA;color:#3B6E4C;border-color:#CFE0D2}
+  .cs-arb{background:var(--gold-soft);color:#7A5A10;border-color:#E9D5A6}
+  .chip-staff.newf{position:relative}
+  .chip-staff .nb{font-size:9px;font-weight:900;background:var(--gold);color:#241B06;border-radius:3px;padding:0 4px}
+  .chip-staff.ghost{position:fixed;z-index:999;pointer-events:none;box-shadow:0 12px 26px -8px rgba(0,0,0,.4);opacity:.95;transform:scale(1.04)}
+  .sgrid{display:grid;grid-template-columns:64px repeat(7,1fr);gap:5px;min-width:760px}
+  .sgrid .hd{padding:6px 4px;text-align:center;font-size:11px;font-weight:700}
+  .sgrid .hd .dt{font-family:var(--mono);font-size:12px;color:var(--ink)}
+  .sgrid .rh{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--muted);text-align:center;line-height:1.3}
+  .dcell{background:#F6F5F0;border:1px solid var(--line-2);border-radius:8px;min-height:88px;padding:6px;display:flex;flex-direction:column;gap:5px;transition:.1s}
+  .dcell.hot{background:var(--green-soft);border-color:var(--green);border-style:dashed}
+  .dcell .cap{font-size:9.5px;font-family:var(--mono);font-weight:700;color:var(--muted);text-align:right}
+  .dcell.under .cap{color:var(--red)}
+  .dcell.met .cap{color:var(--green)}
+  .dcell .chip-staff{padding:4px 8px;font-size:11px;border-radius:7px}
+  .trash{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--muted);border:1.5px dashed var(--line);border-radius:9px;padding:9px 16px;transition:.1s}
+  .trash.hot{border-color:var(--red);color:var(--red);background:var(--red-soft)}
+  .mgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+  .mday{border:1px solid var(--line-2);background:var(--card);border-radius:8px;padding:8px;min-height:74px}
+  .mday .n{font-family:var(--mono);font-size:12px;font-weight:700}
+  .mday .n.sun{color:var(--red)} .mday .n.sat{color:#2F5C8A}
+  .mday .cc{font-family:var(--mono);font-size:11px;margin-top:6px}
+  .mday.under .cc{color:var(--red)} .mday.met .cc{color:var(--green)}
+
+  /* chip time + selected day + modal */
+  .chip-staff{flex-direction:column;align-items:flex-start;gap:2px}
+  .chip-staff .cn{display:flex;align-items:center;gap:4px}
+  .chip-staff .ct{font-family:var(--mono);font-size:9.5px;font-weight:400;opacity:.72}
+  .dcell .chip-staff .ct{cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px;opacity:.9}
+  .dcell .chip-staff .ct:hover{color:var(--indigo);opacity:1}
+  .hd[data-day]{cursor:pointer;border-radius:8px;padding:6px 2px;transition:.1s}
+  .hd[data-day]:hover{background:#EEECE6}
+  .hd.sel{background:var(--indigo)}
+  .hd.sel .dt{color:#fff}
+  .dcell.selcol{background:#EDF0F6;border-color:#CDD7EA}
+  .tilde{color:var(--muted);font-weight:700}
+  .modal{position:fixed;inset:0;background:rgba(20,25,40,.42);display:none;align-items:center;justify-content:center;z-index:100}
+  .modal.show{display:flex}
+  .mcard{background:#fff;border-radius:13px;padding:22px;width:280px;box-shadow:0 24px 50px -18px rgba(0,0,0,.4)}
+  .mcard .mh{font-weight:900;margin-bottom:16px;font-size:15px}
+  .mcard input[type=time]{font-family:var(--mono);font-size:15px;border:1px solid var(--line);border-radius:8px;padding:9px 10px;background:var(--card);color:var(--ink)}
+  .mrow{display:flex;align-items:center;gap:10px;justify-content:center}
+  .mbtns{display:flex;gap:8px;justify-content:flex-end;margin-top:20px}
+  .halfrow{display:flex;align-items:center;gap:9px;margin-top:14px;font-size:12.5px;cursor:pointer}
+  .halfrow input{width:17px;height:17px;accent-color:var(--indigo)}
+
+  .wsel{display:flex;gap:6px;flex-wrap:wrap}
+  .wsel button{font-family:var(--jp);font-weight:700;font-size:12px;padding:8px 12px;border-radius:9px;border:1px solid var(--line);background:var(--card);color:var(--ink-2);cursor:pointer;display:flex;flex-direction:column;align-items:center;line-height:1.3;gap:1px}
+  .wsel button .wr{font-family:var(--mono);font-size:9px;opacity:.6;font-weight:400}
+  .wsel button.on{background:var(--indigo);color:#fff;border-color:var(--indigo)}
+  .wsel button.on .wr{opacity:.85}
+  .hd.other .dt{color:#B7B2A6} .hd.other{cursor:default}
+  .dcell.other{background:repeating-linear-gradient(45deg,#F1EFEA,#F1EFEA 6px,#EDEBE4 6px,#EDEBE4 12px);border-style:dashed;min-height:88px}
+  .chip-staff .hb{font-size:10px;font-weight:900;background:#fff;border:1px solid currentColor;border-radius:4px;padding:0 3px;line-height:1.3}
+  .chip-staff.half{opacity:.94}
+  .cbx2{width:17px;height:17px;border-radius:5px;border:1.5px solid #C5C1B6;background:#fff;cursor:pointer;display:inline-grid;place-items:center;vertical-align:middle;transition:.1s}
+  .cbx2.on{background:var(--indigo);border-color:var(--indigo)}
+  .cbx2.on::after{content:"";width:4px;height:8px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg) translateY(-1px)}
+  .tgl{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:var(--ink-2);margin-right:8px;cursor:pointer}
+
+  /* editable requirement table */
+  .reqtbl td{vertical-align:top}
+  .ri{font-family:var(--jp);font-size:13px;border:1px solid var(--line);border-radius:7px;padding:7px 9px;background:var(--card);color:var(--ink);width:100%}
+  .ri.pos{font-weight:700;min-width:110px}
+  .ri.note{margin-top:0;max-width:190px}
+  .rt{font-family:var(--mono);font-size:12px;border:1px solid var(--line);border-radius:6px;padding:6px;background:var(--card);color:var(--ink)}
+  .nowrap{white-space:nowrap}
+  .stp{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+  .stp button{border:none;background:#F1EFEA;width:28px;height:30px;font-size:16px;cursor:pointer;color:var(--ink);font-family:var(--mono)}
+  .stp button:hover{background:#E7E4DC}
+  .stp b{min-width:30px;text-align:center;font-family:var(--mono);font-size:14px}
+  .condrow{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .mm{display:inline-flex;align-items:center;gap:2px;font-size:11px;font-weight:700;color:var(--ink-2);background:#F6F5F0;border:1px solid var(--line-2);border-radius:7px;padding:2px 5px}
+  .mm button{border:none;background:#E4E2DB;width:20px;height:20px;border-radius:4px;font-size:13px;cursor:pointer;font-family:var(--mono);color:var(--ink)}
+  .mm b{min-width:15px;text-align:center;font-family:var(--mono);font-size:12px;margin:0 1px}
+  .condsum{font-size:11px;color:var(--indigo);font-weight:700;margin-top:6px}
+  .xbtn{border:1px solid var(--line);background:var(--card);color:var(--red);width:28px;height:28px;border-radius:7px;cursor:pointer;font-weight:700}
+  .xbtn:hover{background:var(--red-soft);border-color:var(--red)}
+
+  /* staff edit modal + tags */
+  .b-new-tag{background:var(--gold);color:#241B06} .b-def{background:#E7E4DC;color:var(--ink-2)}
+  .fld{margin-bottom:16px}
+  .fld>label{display:block;font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.04em;margin-bottom:7px}
+  .tagwrap{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .tagchip{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;background:#EFF1F5;border:1px solid #D6DBE6;color:var(--indigo);border-radius:20px;padding:4px 10px}
+  .tagchip .x{cursor:pointer;font-weight:900;opacity:.55}
+  .tagadd{display:inline-flex;align-items:center;gap:3px}
+  .tagadd input{width:90px;font-family:var(--jp);font-size:12px;border:1px solid var(--line);border-radius:7px;padding:5px 8px}
+  .tagadd button{border:1px solid var(--indigo);background:var(--card);color:var(--indigo);border-radius:7px;width:28px;height:28px;cursor:pointer;font-weight:700}
+  .tagsug{display:inline-block;font-size:11px;color:var(--indigo);cursor:pointer;margin-right:8px;font-weight:700}
+  .tagsug:hover{text-decoration:underline}
+  .wtype{display:flex;gap:14px;margin-bottom:10px}
+  .rd{display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:700;cursor:pointer}
+  .rd input{accent-color:var(--indigo)}
+  .amtrow{display:flex;align-items:center;gap:8px}
+  .amtrow input{font-family:var(--mono);font-size:15px;border:1px solid var(--line);border-radius:8px;padding:9px 10px;width:130px}
+  .amtrow .unit{font-size:12px;color:var(--muted);font-weight:700}
+
+  .disclaimer{margin:0 30px 24px;font-size:11px;color:var(--muted);font-family:var(--mono);letter-spacing:.03em}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<aside class="side">
+  <div class="brand">
+    <div class="noren"><i></i><i></i><i></i><i></i></div>
+    <h1>SHIN<span>勤怠</span></h1>
+    <div class="sub">KINTAI · SHIFT</div>
+  </div>
+  <div class="role-pick">
+    <div class="lab">役割を切替（デモ）</div>
+    <div class="role-btns" id="roleBtns">
+      <button data-r="owner">オーナー</button>
+      <button data-r="area">エリアM</button>
+      <button data-r="manager">店長</button>
+      <button data-r="staff">スタッフ</button>
+    </div>
+  </div>
+  <nav id="nav"></nav>
+  <div class="side-foot">MOCK v0 · SaaS demo</div>
+</aside>
+
+<main class="main">
+  <div class="topbar">
+    <div class="scope">
+      <span class="tag">SCOPE</span>
+      <select id="scopeSel"></select>
+    </div>
+    <div class="clock" id="clock"></div>
+    <div class="who">
+      <div class="av" id="whoAv">島</div>
+      <div><div class="nm" id="whoNm">島田 雅光</div><div class="rl" id="whoRl">オーナー</div></div>
+    </div>
+  </div>
+  <div id="content"></div>
+  <div class="disclaimer">※ これは操作イメージ確認用のモックです。数値・氏名・打刻はダミー。実データ・給与計算・DB接続は未接続です。</div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------------- icons ---------------- */
+const IC = {
+  dash:'<path d="M3 13h8V3H3zM13 21h8V11h-8zM13 3v6h8V3zM3 21h8v-6H3z"/>',
+  clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  labor:'<path d="M3 3v18h18"/><rect x="7" y="10" width="3" height="8"/><rect x="12" y="6" width="3" height="12"/><rect x="17" y="13" width="3" height="5"/>',
+  shift:'<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/>',
+  master:'<circle cx="9" cy="8" r="3"/><path d="M4 20c0-3 2.5-5 5-5s5 2 5 5"/><path d="M17 11h4M19 9v4"/>',
+  perm:'<path d="M12 2l7 4v6c0 4-3 7-7 8-4-1-7-4-7-8V6z"/><path d="M9 12l2 2 4-4"/>',
+  csv:'<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/>',
+  qr:'<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3M20 14v0M17 20h4M20 17v4"/>',
+  punch:'<circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/>',
+  cal:'<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/>',
+  pay:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 14h4M7 17h7"/>'
+};
+const svg = k => `<svg viewBox="0 0 24 24" fill="none" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${IC[k]}</svg>`;
+
+/* ---------------- config ---------------- */
+const ROLES = {
+  owner:  {nm:'島田 雅光', av:'島', label:'オーナー', scope:['全社','東京エリア','関西エリア','神泉本店','渋谷店','恵比寿店','大阪店'], seesWage:true, editMaster:true},
+  area:   {nm:'高橋 圭',   av:'高', label:'エリアマネージャー（東京）', scope:['東京エリア','神泉本店','渋谷店','恵比寿店'], seesWage:true, editMaster:false},
+  manager:{nm:'鈴木 大輔', av:'鈴', label:'店長（神泉本店）', scope:['神泉本店'], seesWage:false, editMaster:false},
+  staff:  {nm:'佐藤 美咲', av:'佐', label:'アルバイト（神泉本店）', scope:['神泉本店'], seesWage:false, editMaster:false}
+};
+const NAV = {
+  owner:  [['dash','ダッシュボード'],['attend','勤怠・補正'],['labor','人件費'],['shift','シフト'],['master','スタッフ・店舗'],['perm','権限設定'],['csv','CSV抽出'],['qr','店舗QR表示']],
+  area:   [['dash','ダッシュボード'],['attend','勤怠・補正'],['labor','人件費'],['shift','シフト'],['csv','CSV抽出'],['qr','店舗QR表示']],
+  manager:[['dash','ダッシュボード'],['attend','勤怠・補正'],['labor','人件費'],['shift','シフト'],['csv','CSV抽出'],['qr','店舗QR表示']],
+  staff:  [['punch','打刻'],['myshift','今日のシフト'],['request','希望申請'],['pay','給与明細']]
+};
+const NAVICON = {dash:'dash',attend:'clock',labor:'labor',shift:'shift',master:'master',perm:'perm',csv:'csv',qr:'qr',punch:'punch',myshift:'cal',request:'cal',pay:'pay'};
+
+let state = {role:'owner', screen:'dash'};
+
+/* ---------------- mock data ---------------- */
+const STAFF = [
+  {nm:'鈴木 大輔', type:'emp',  tl:'社員',    role:'店長/フロア', store:'神泉本店', wage:'固定 320,000', st:'in',  in:'09:58', out:'', brk:false, gps:'ok', tags:['社員','店長'], wageType:'fixed', amount:320000, commute:'定期 12,000/月', trainer:true, stores:['神泉本店']},
+  {nm:'田中 誠',   type:'emp',  tl:'社員',    role:'キッチン',   store:'神泉本店', wage:'固定 285,000', st:'in',  in:'10:02', out:'', brk:false, gps:'ok', tags:['社員'], wageType:'fixed', amount:285000, commute:'定期 9,800/月', trainer:true, stores:['神泉本店']},
+  {nm:'佐藤 美咲', type:'arb',  tl:'アルバイト',role:'フロア',    store:'神泉本店', wage:'1,300 /h', st:'br', in:'11:00', out:'', brk:true, gps:'ok', tags:['アルバイト'], wageType:'hourly', amount:1300, commute:'往復 620/日', stores:['神泉本店','渋谷店']},
+  {nm:'山本 蓮',   type:'arb',  tl:'アルバイト',role:'フロア',    store:'神泉本店', wage:'1,200 /h', st:'in', in:'17:03', out:'', brk:false, gps:'flag', newbie:true, tags:['アルバイト','新人'], wageType:'hourly', amount:1200, commute:'往復 480/日', stores:['神泉本店']},
+  {nm:'リン・チェン',type:'part',tl:'パート',   role:'キッチン',   store:'神泉本店', wage:'1,350 /h', st:'plan', in:'—', out:'', brk:false, gps:'', tags:['パート'], wageType:'hourly', amount:1350, commute:'往復 700/日', stores:['神泉本店']},
+  {nm:'グエン',    type:'out',  tl:'業務委託',  role:'キッチン(委託)',store:'神泉本店', wage:'請求 / 稼働自己申告', st:'out', in:'—', out:'—', brk:false, gps:'', contractor:true, tags:['業務委託'], wageType:'invoice', amount:0, commute:'—', stores:['神泉本店']}
+];
+const btype = t => ({emp:'b-emp',part:'b-part',arb:'b-arb',out:'b-out'}[t]);
+const stMap = {in:['st-in','出勤中'],br:['st-br','休憩中'],out:['st-out','退勤済'],plan:['st-plan','予定']};
+function tagCls(t){return t==='新人'?'b-new-tag':t==='社員'?'b-emp':t==='パート'?'b-part':t==='アルバイト'?'b-arb':t==='業務委託'?'b-out':'b-def';}
+function wageLabel(s){return s.wageType==='fixed'?('固定 '+(s.amount||0).toLocaleString()):s.wageType==='hourly'?((s.amount||0).toLocaleString()+' /h'):'請求ベース';}
+
+/* ---------------- render helpers ---------------- */
+const $ = s => document.querySelector(s);
+function renderNav(){
+  const nav=$('#nav'); nav.innerHTML='<div class="navlab">MENU</div>';
+  NAV[state.role].forEach(([k,l])=>{
+    const a=document.createElement('a'); a.className='navitem'+(state.screen===k?' on':'');
+    a.innerHTML=svg(NAVICON[k])+`<span>${l}</span>`;
+    a.onclick=()=>{state.screen=k;draw()};
+    nav.appendChild(a);
+  });
+}
+function renderScope(){
+  const sel=$('#scopeSel'); sel.innerHTML='';
+  ROLES[state.role].scope.forEach(s=>{const o=document.createElement('option');o.textContent=s;sel.appendChild(o)});
+  sel.disabled = state.role==='staff';
+}
+function setRole(r){
+  state.role=r; state.screen=NAV[r][0][0];
+  document.querySelectorAll('#roleBtns button').forEach(b=>b.classList.toggle('on',b.dataset.r===r));
+  const R=ROLES[r]; $('#whoNm').textContent=R.nm; $('#whoAv').textContent=R.av; $('#whoRl').textContent=R.label;
+  draw();
+}
+function toast(html){const t=$('#toast');t.innerHTML=html;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2200)}
+
+function draw(){ renderNav(); renderScope(); $('#content').innerHTML = SCREENS[state.screen]?SCREENS[state.screen]():SCREENS.dash(); afterDraw(); }
+
+/* ---------------- screens ---------------- */
+const SCREENS = {};
+
+SCREENS.dash = () => {
+  const R=ROLES[state.role];
+  const scopeName = R.scope[0];
+  const rows = STAFF.map(s=>{
+    const [cls,lab]=stMap[s.st];
+    // build a punch strip based on times (mock geometry)
+    let strip='';
+    if(s.st==='in'||s.st==='br'||s.st==='out'){
+      strip=`<div class="strip"><div class="seg work" style="left:38%;width:${s.st==='out'?38:26}%"></div>${s.brk?'<div class="seg brk" style="left:58%;width:6%"></div>':''}</div>`;
+    } else { strip=`<div class="strip"></div>`; }
+    return `<tr>
+      <td><b>${s.nm}</b>${s.newbie?'<span class="newbie">新</span>':''}<div class="badge ${btype(s.type)}" style="margin-top:4px">${s.tl}</div></td>
+      <td class="note">${s.role}</td>
+      <td class="mono">${s.in}</td>
+      <td>${strip}</td>
+      <td><span class="st ${cls}"><span class="dot"></span>${lab}</span></td>
+      <td>${s.gps==='ok'?'<span class="note" style="color:var(--green)">位置OK</span>':s.gps==='flag'?'<span class="flag">⚑ 位置未確認</span>':'<span class="note">—</span>'}</td>
+    </tr>`;
+  }).join('');
+  return `<div class="wrap">
+    <div class="page-h"><div><div class="eyebrow">${scopeName} · 本日</div><h2>今日のシフト表</h2></div>
+      <div class="desc">出勤中 ・ 休憩 ・ 予定を一目で。時給/給与は表示されません。</div></div>
+    <div class="grid kpis">
+      <div class="card kpi"><div class="k">出勤中</div><div class="v">3<small>名</small></div><div class="d">予定どおり</div></div>
+      <div class="card kpi"><div class="k">休憩中</div><div class="v">1<small>名</small></div><div class="d">残 32 分</div></div>
+      <div class="card kpi"><div class="k">本日の予定人数</div><div class="v">6<small>名</small></div><div class="d">キッチン3 / フロア3</div></div>
+      <div class="card kpi"><div class="k">要確認</div><div class="v">1<small>件</small></div><div class="d warn">⚑ GPS位置未確認</div></div>
+    </div>
+    <div class="sec-h"><h3>スタッフ稼働</h3><div class="rule"></div><div class="cnt">${STAFF.length} 名</div></div>
+    <div class="card"><table><thead><tr><th>氏名 / 区分</th><th>ポジション</th><th>出勤</th><th>タイムライン</th><th>状態</th><th>GPS</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="legend"><span><span class="sw" style="background:var(--green)"></span>勤務</span><span><span class="sw" style="background:var(--gold)"></span>休憩</span><span><span class="newbie" style="margin:0">新</span> 新人（要指導）</span></div>
+  </div>`;
+};
+
+SCREENS.attend = () => {
+  return `<div class="wrap">
+    <div class="page-h"><div><div class="eyebrow">神泉本店 · 打刻ログ</div><h2>勤怠・補正</h2></div>
+      <div class="desc">打刻忘れ・休憩の押し忘れは、本人申請 → 管理者承認で補正。</div></div>
+    <div class="sec-h"><h3>承認待ちの補正申請</h3><div class="rule"></div><div class="cnt">2 件</div></div>
+    <div class="card"><table><thead><tr><th>氏名</th><th>日付</th><th>内容</th><th>申請理由</th><th style="text-align:right">操作</th></tr></thead><tbody>
+      <tr><td><b>佐藤 美咲</b></td><td class="mono">07/08</td><td>退勤 <span class="mono">未打刻 → 22:14</span></td><td class="note">閉め作業でスマホ忘れ</td>
+        <td style="text-align:right"><button class="btn sm" onclick="toast('差戻しました（mock）')">差戻</button> <button class="btn sm pri" onclick="toast('<span class=g>✓</span> 承認しました（mock）')">承認</button></td></tr>
+      <tr><td><b>山本 蓮</b><span class="newbie">新</span></td><td class="mono">07/07</td><td>休憩終了 <span class="mono">18:45 → 18:20</span></td><td class="note">押し忘れ</td>
+        <td style="text-align:right"><button class="btn sm" onclick="toast('差戻しました（mock）')">差戻</button> <button class="btn sm pri" onclick="toast('<span class=g>✓</span> 承認しました（mock）')">承認</button></td></tr>
+    </tbody></table></div>
+    <div class="sec-h"><h3>本日の打刻（1分単位・丸めは月合計側）</h3><div class="rule"></div></div>
+    <div class="card"><table><thead><tr><th>氏名</th><th>出勤</th><th>休憩</th><th>退勤</th><th>実働</th><th>深夜</th><th>取得元</th></tr></thead><tbody>
+      <tr><td>鈴木 大輔</td><td class="mono">09:58</td><td class="mono">—</td><td class="mono">在店</td><td class="mono">—</td><td class="mono">—</td><td><span class="badge b-emp">QR+GPS</span></td></tr>
+      <tr><td>佐藤 美咲</td><td class="mono">11:00</td><td class="mono">14:30–15:00</td><td class="mono">在店</td><td class="mono">—</td><td class="mono">—</td><td><span class="badge b-emp">QR+GPS</span></td></tr>
+      <tr><td>山本 蓮 <span class="newbie">新</span></td><td class="mono">17:03</td><td class="mono">—</td><td class="mono">在店</td><td class="mono">—</td><td class="mono" style="color:var(--indigo)">22:00〜</td><td><span class="flag">⚑ 位置未確認</span></td></tr>
+    </tbody></table></div>
+    <p class="note" style="margin-top:12px">深夜（22:00–翌5:00）は +25% を自動判定。時間外・法定休日の割増率はテナント設定で保持（社労士確認前提）。</p>
+  </div>`;
+};
+
+SCREENS.labor = () => {
+  const R=ROLES[state.role];
+  const wageCol = R.seesWage
+    ? `<td class="mono yen">1,300</td>`
+    : `<td><span class="lockcell">${svg('perm').replace('stroke-width="1.9"','stroke-width="1.6"')} 権限なし</span></td>`;
+  const stores = state.role==='manager'
+    ? [['神泉本店', '842,000', 68]]
+    : [['神泉本店','842,000',68],['渋谷店','915,300',72],['恵比寿店','688,400',59]].concat(state.role==='owner'?[['大阪店','770,100',64]]:[]);
+  const total = stores.reduce((a,s)=>a+parseInt(s[1].replace(/,/g,'')),0);
+  const bars = stores.map(s=>`<div style="margin-bottom:13px">
+      <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px"><b>${s[0]}</b><span class="mono yen">${s[1]}<span style="color:var(--muted)"> · 人件費率 ${s[2]}%…</span></span></div>
+      <div class="bar" style="height:10px"><i style="width:${Math.min(100,parseInt(s[1].replace(/,/g,''))/9500)}%"></i></div>
+    </div>`).join('');
+  const perStaff = R.seesWage ? `
+    <div class="sec-h"><h3>個人別 内訳</h3><div class="rule"></div><div class="cnt">賃金表示 ON</div></div>
+    <div class="card"><table><thead><tr><th>氏名</th><th>区分</th><th>基準</th><th>実績時間</th><th>支給見込</th></tr></thead><tbody>
+      <tr><td>鈴木 大輔</td><td><span class="badge b-emp">社員</span></td><td class="mono">固定給</td><td class="mono">—</td><td class="mono yen">320,000</td></tr>
+      <tr><td>佐藤 美咲</td><td><span class="badge b-arb">アルバイト</span></td><td class="mono yen">1,300/h</td><td class="mono">86.5h</td><td class="mono yen">112,450</td></tr>
+      <tr><td>山本 蓮 <span class="newbie">新</span></td><td><span class="badge b-arb">アルバイト</span></td><td class="mono yen">1,200/h</td><td class="mono">41.0h</td><td class="mono yen">49,200</td></tr>
+      <tr><td>グエン</td><td><span class="badge b-out">業務委託</span></td><td class="mono">請求ベース</td><td class="mono">—</td><td class="mono yen">180,000</td></tr>
+    </tbody></table></div>`
+    : `<div class="card" style="padding:22px;margin-top:18px;display:flex;gap:14px;align-items:center">
+        <span class="lockcell" style="font-size:14px">${svg('perm')} </span>
+        <div><b>個人別の賃金・時給は非表示です。</b><div class="note" style="margin-top:3px">集計人件費は閲覧できますが、個人賃金の閲覧はオーナー設定で OFF になっています（役割：店長）。オーナーが権限設定で許可すると表示されます。</div></div>
+      </div>`;
+  return `<div class="wrap">
+    <div class="page-h"><div><div class="eyebrow">${R.scope[0]} · 今月</div><h2>人件費</h2></div>
+      <div class="desc">${R.seesWage?'集計 + 個人別を閲覧できます。':'集計のみ。個人賃金は権限制御。'}</div></div>
+    <div class="grid kpis">
+      <div class="card kpi"><div class="k">${R.scope[0]} 人件費（見込）</div><div class="v yen" style="font-size:23px">${total.toLocaleString()}</div><div class="d">前月比 +3.2%</div></div>
+      <div class="card kpi"><div class="k">固定給</div><div class="v yen" style="font-size:23px">605,000</div><div class="d">社員 2 名</div></div>
+      <div class="card kpi"><div class="k">時給・変動</div><div class="v yen" style="font-size:23px">${(total-605000).toLocaleString()}</div><div class="d">パート/アルバイト</div></div>
+      <div class="card kpi"><div class="k">歩合・賞与・手当</div><div class="v yen" style="font-size:23px">42,000</div><div class="d">交通費 / チップ 含む</div></div>
+    </div>
+    <div class="sec-h"><h3>店舗別 人件費</h3><div class="rule"></div><div class="cnt">${stores.length} 店舗</div></div>
+    <div class="card" style="padding:18px 20px">${bars}<p class="note" style="margin-top:4px">※ 人件費率（人件費÷売上）は SHIN 連携時に自動表示（現在はダミー）。</p></div>
+    ${perStaff}
+  </div>`;
+};
+
+/* ---- shift: day-type requirement templates + week/month D&D builder ---- */
+const DAYTYPES = {
+  weekday:{lab:'平日',  cls:'dt-w',   noon:2, night:3},
+  fri:    {lab:'金曜',  cls:'dt-fri', noon:2, night:4},
+  sat:    {lab:'土曜',  cls:'dt-sat', noon:3, night:5},
+  sun:    {lab:'日曜',  cls:'dt-sun', noon:3, night:4},
+  holiday:{lab:'祝日',  cls:'dt-hol', noon:3, night:5}
+};
+let dtSel='weekday';
+let shiftMode='week';
+// editable requirement rows per day-type (source of truth for ①)
+function baseReq(dt){const t=DAYTYPES[dt];return [
+  {pos:'キッチン', from:'11:00', to:'17:00', need:Math.max(1,t.noon-1), cond:{emp:1}, note:''},
+  {pos:'キッチン', from:'17:00', to:'23:00', need:t.night-1, cond:{emp:1,part:1}, note:''},
+  {pos:'フロア', from:'11:00', to:'17:00', need:t.noon, cond:{}, note:'下限1'},
+  {pos:'フロア', from:'17:00', to:'23:00', need:t.night, cond:{}, note:'下限2 / 新人0.5換算'},
+  {pos:'洗い場（自由）', from:'19:00', to:'23:00', need:(dt==='weekday'?0:1), cond:{}, note:'繁忙日のみ'}
+];}
+const REQ={}; Object.keys(DAYTYPES).forEach(k=>REQ[k]=baseReq(k));
+function condSummary(r){const p=[];if(r.cond.emp)p.push('社員≥'+r.cond.emp);if(r.cond.part)p.push('パート≥'+r.cond.part);if(r.cond.arb)p.push('バイト≥'+r.cond.arb);let s=p.join('・');if(r.note)s+=(s?' / ':'')+r.note;return s||'—';}
+// week of 7/20–7/26 2026 (月20=祝 海の日, 火水木=平日, 金24, 土25, 日26)
+// 5 selectable weeks of July 2026 (Mon–Sun). other=1 marks adjacent-month days.
+const WEEKS=[
+  {lab:'第1週',range:'6/29–7/5',days:[
+    {d:29,dow:'月',other:1},{d:30,dow:'火',other:1},
+    {d:1,dow:'水',type:'weekday'},{d:2,dow:'木',type:'weekday'},{d:3,dow:'金',type:'fri'},{d:4,dow:'土',type:'sat'},{d:5,dow:'日',type:'sun'}]},
+  {lab:'第2週',range:'7/6–7/12',days:[
+    {d:6,dow:'月',type:'weekday'},{d:7,dow:'火',type:'weekday'},{d:8,dow:'水',type:'weekday'},{d:9,dow:'木',type:'weekday'},{d:10,dow:'金',type:'fri'},{d:11,dow:'土',type:'sat'},{d:12,dow:'日',type:'sun'}]},
+  {lab:'第3週',range:'7/13–7/19',days:[
+    {d:13,dow:'月',type:'weekday'},{d:14,dow:'火',type:'weekday'},{d:15,dow:'水',type:'weekday'},{d:16,dow:'木',type:'weekday'},{d:17,dow:'金',type:'fri'},{d:18,dow:'土',type:'sat'},{d:19,dow:'日',type:'sun'}]},
+  {lab:'第4週',range:'7/20–7/26',days:[
+    {d:20,dow:'月',type:'holiday',hol:'海の日'},{d:21,dow:'火',type:'weekday'},{d:22,dow:'水',type:'weekday'},{d:23,dow:'木',type:'weekday'},{d:24,dow:'金',type:'fri'},{d:25,dow:'土',type:'sat'},{d:26,dow:'日',type:'sun'}]},
+  {lab:'第5週',range:'7/27–8/2',days:[
+    {d:27,dow:'月',type:'weekday'},{d:28,dow:'火',type:'weekday'},{d:29,dow:'水',type:'weekday'},{d:30,dow:'木',type:'weekday'},{d:31,dow:'金',type:'fri'},
+    {d:1,dow:'土',other:1},{d:2,dow:'日',other:1}]}
+];
+let weekIdx=3;               // default 第4週 (showcase week with holiday)
+// pre-placed assignments after auto-generate: {day:{noon:[...],night:[...]}}
+const PLACED = {};
+let selectedDay = 20;
+// who submitted availability for each July day: [name, type, from, to, newFlag]
+const AVAIL = {
+  3:[['田中','emp','11:00','23:00'],['鈴木','emp','17:00','23:00'],['佐藤','arb','17:00','23:00']],
+  4:[['田中','emp','11:00','23:00'],['中村','arb','11:00','23:00'],['佐藤','arb','17:00','23:00'],['小林','part','11:00','17:00']],
+  5:[['鈴木','emp','11:00','23:00'],['渡辺','arb','11:00','23:00'],['リン','part','11:00','17:00']],
+  10:[['鈴木','emp','17:00','23:00'],['佐藤','arb','17:00','23:00'],['中村','arb','17:00','23:00'],['小林','part','17:00','23:00']],
+  11:[['田中','emp','11:00','23:00'],['佐藤','arb','11:00','23:00'],['渡辺','arb','17:00','23:00'],['中村','arb','11:00','23:00'],['山本','arb','17:00','22:00',1]],
+  12:[['鈴木','emp','11:00','23:00'],['リン','part','11:00','17:00'],['佐藤','arb','11:00','23:00']],
+  17:[['鈴木','emp','17:00','23:00'],['中村','arb','17:00','23:00'],['小林','part','17:00','23:00']],
+  18:[['田中','emp','11:00','23:00'],['佐藤','arb','17:00','23:00'],['渡辺','arb','17:00','23:00'],['山本','arb','17:00','22:00',1]],
+  19:[['鈴木','emp','11:00','23:00'],['中村','arb','11:00','23:00'],['リン','part','11:00','17:00']],
+  20:[['田中','emp','11:00','23:00'],['鈴木','emp','17:00','23:00'],['リン','part','11:00','17:00'],['中村','arb','11:00','17:00'],['佐藤','arb','17:00','23:00'],['山本','arb','17:00','22:00',1],['渡辺','arb','17:00','23:00']],
+  21:[['鈴木','emp','17:00','23:00'],['リン','part','11:00','17:00'],['佐藤','arb','17:00','23:00']],
+  22:[['田中','emp','11:00','23:00'],['小林','part','17:00','23:00'],['中村','arb','17:00','23:00']],
+  23:[['鈴木','emp','17:00','23:00'],['中村','arb','17:00','23:00'],['渡辺','arb','17:00','22:00']],
+  24:[['鈴木','emp','17:00','23:00'],['佐藤','arb','17:00','23:00'],['小林','part','17:00','23:00'],['渡辺','arb','17:00','23:00'],['山本','arb','17:00','22:00',1]],
+  25:[['田中','emp','11:00','23:00'],['佐藤','arb','17:00','23:00'],['中村','arb','11:00','23:00'],['渡辺','arb','17:00','23:00'],['リン','part','11:00','17:00']],
+  26:[['鈴木','emp','11:00','23:00'],['佐藤','arb','11:00','23:00'],['小林','part','11:00','17:00'],['田中','emp','11:00','23:00']],
+  27:[['田中','emp','11:00','23:00'],['鈴木','emp','17:00','23:00'],['佐藤','arb','17:00','23:00']],
+  31:[['鈴木','emp','17:00','23:00'],['中村','arb','17:00','23:00'],['小林','part','17:00','23:00']]
+};
+
+SCREENS.shift = () => {
+  const counts = Object.entries(DAYTYPES).map(([k,v])=>`${v.lab} 夜${REQ[k].filter(r=>r.from>='17:00').reduce((s,r)=>s+r.need,0)}`).join(' / ');
+  return `<div class="wrap">
+    <div class="page-h"><div><div class="eyebrow">神泉本店 · 2026年7月</div><h2>シフト</h2></div>
+      <div class="desc">希望を集約 → 自動提案 → 週間カレンダーでドラッグ配置。</div></div>
+
+    <div class="card" style="padding:16px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:6px">
+      <div style="flex:1;min-width:220px"><div style="font-weight:700">① 必要人員の定義</div><div class="note" style="margin-top:2px">日タイプ別の必要数・条件を設定（${counts} …）</div></div>
+      <button class="btn pri sm" onclick="go('reqdef')">⚙ 必要人員を設定</button>
+    </div>
+
+    <div class="sec-h"><h3>② 自動提案 → 手動調整</h3><div class="rule"></div>
+      <div class="seg"><button class="${shiftMode==='week'?'on':''}" onclick="setShiftMode('week')">週間</button><button class="${shiftMode==='month'?'on':''}" onclick="setShiftMode('month')">月間</button></div>
+    </div>
+    <div class="card" style="padding:18px 20px" id="builderCard">${shiftMode==='week'?weekBuilder():monthView()}</div>
+  </div>`;
+};
+SCREENS.reqdef = () => `<div class="wrap">
+  <div class="page-h"><div><div class="eyebrow">シフト · 設定</div><h2>必要人員の定義</h2></div>
+    <div class="desc">日タイプ（平日/金/土/日/祝）ごとに、ポジション・時間帯・必要数・条件を登録。</div></div>
+  <button class="btn sm" style="margin-bottom:14px" onclick="go('shift')">← シフトに戻る</button>
+  <div class="card" style="padding:18px 20px" id="reqCard">${reqCardHTML()}</div>
+</div>`;
+function go(s){state.screen=s;draw();}
+function reqCardHTML(){
+  const rows=REQ[dtSel].map((r,i)=>`<tr>
+    <td><input class="ri pos" value="${r.pos}" onchange="reqEdit(${i},'pos',this.value)"></td>
+    <td class="nowrap"><input type="time" class="rt" value="${r.from}" onchange="reqEdit(${i},'from',this.value)"><span class="tilde">–</span><input type="time" class="rt" value="${r.to}" onchange="reqEdit(${i},'to',this.value)"></td>
+    <td><span class="stp"><button onclick="reqStep(${i},'need',-1)">−</button><b>${r.need}</b><button onclick="reqStep(${i},'need',1)">＋</button></span></td>
+    <td>
+      <div class="condrow">
+        <span class="mm">社員<button onclick="reqCond(${i},'emp',-1)">−</button><b>${r.cond.emp||0}</b><button onclick="reqCond(${i},'emp',1)">＋</button></span>
+        <span class="mm">パート<button onclick="reqCond(${i},'part',-1)">−</button><b>${r.cond.part||0}</b><button onclick="reqCond(${i},'part',1)">＋</button></span>
+        <span class="mm">バイト<button onclick="reqCond(${i},'arb',-1)">−</button><b>${r.cond.arb||0}</b><button onclick="reqCond(${i},'arb',1)">＋</button></span>
+        <input class="ri note" value="${r.note||''}" placeholder="メモ（任意）" onchange="reqEdit(${i},'note',this.value)">
+      </div>
+      <div class="condsum">→ ${condSummary(r)}</div>
+    </td>
+    <td><button class="xbtn" title="削除" onclick="reqDelRow(${i})">✕</button></td>
+  </tr>`).join('');
+  return `<div class="seg dtype" style="margin-bottom:14px">
+      ${Object.entries(DAYTYPES).map(([k,v])=>`<button class="${dtSel===k?'on':''}" onclick="setDtype('${k}')">${v.lab}</button>`).join('')}
+    </div>
+    <div style="overflow-x:auto"><table class="reqtbl"><thead><tr><th style="min-width:120px">ポジション</th><th>時間帯</th><th>必要数</th><th style="min-width:300px">形態・条件（雇用形態ごとの最低人数＋メモ）</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+    <button class="btn sm" style="margin-top:12px" onclick="reqAddRow()">＋ ポジション/時間帯を追加</button>
+    <p class="note" style="margin-top:10px"><b>必要数</b>＝その時間帯に必要な総人数（−/＋で登録）。<b>形態・条件</b>＝雇用形態ごとの「最低◯人」を−/＋で指定すると「社員≥1・パート≥1」と自動生成、右のメモは自由記入。ポジション名・時刻はその場で編集、行は追加/✕削除。日タイプ（平日/金/土/日/祝）ごとに別々に保存されます。</p>`;
+}
+function renderReqCard(){const el=document.getElementById('reqCard');if(el)el.innerHTML=reqCardHTML();}
+function reqEdit(i,k,v){REQ[dtSel][i][k]=v; if(k==='note')renderReqCard();}
+function reqStep(i,k,d){REQ[dtSel][i][k]=Math.max(0,(REQ[dtSel][i][k]||0)+d);renderReqCard();}
+function reqCond(i,k,d){const c=REQ[dtSel][i].cond;c[k]=Math.max(0,(c[k]||0)+d);renderReqCard();}
+function reqAddRow(){REQ[dtSel].push({pos:'新しいポジション',from:'17:00',to:'23:00',need:1,cond:{},note:''});renderReqCard();toast('行を追加しました');}
+function reqDelRow(i){REQ[dtSel].splice(i,1);renderReqCard();toast('行を削除しました');}
+
+function sChip(n,ty,nb,src,from,to,w){
+  const half = (w==0.5)||(w===undefined&&nb);   // newbie defaults to 0.5
+  const wv = half?0.5:1;
+  return `<div class="chip-staff cs-${ty}${nb?' newf':''}${half?' half':''}" data-name="${n}" data-ty="${ty}"${nb?' data-new="1"':''} data-src="${src}" data-from="${from||''}" data-to="${to||''}" data-w="${wv}">`
+    +`<span class="cn">${n}${nb?'<span class="nb">新</span>':''}${half?'<span class="hb">½</span>':''}</span>`
+    +(from?`<span class="ct">${from}–${to}</span>`:'')
+    +`</div>`;
+}
+function poolFor(d){
+  const a=AVAIL[d]||[];
+  return a.length? a.map(x=>sChip(x[0],x[1],x[4],'pool',x[2],x[3])).join('') : '<div class="note">この日の希望はまだありません</div>';
+}
+function curDays(){return WEEKS[weekIdx].days;}
+function dayLabel(d){const w=curDays().find(x=>x.d===d&&!x.other);return w?`${d}日(${w.dow}${w.hol?'・'+w.hol:''})`:d+'日';}
+function firstJulyDay(i){const w=WEEKS[i].days.find(x=>!x.other);return w?w.d:1;}
+function fmtW(n){return Number.isInteger(n)?n:n.toFixed(1);}
+
+function weekBuilder(){
+  const bands=[['noon','昼<br>11–17'],['night','夜<br>17–23']];
+  const wsel = WEEKS.map((w,i)=>`<button class="${i===weekIdx?'on':''}" onclick="setWeek(${i})">${w.lab}<span class="wr">${w.range}</span></button>`).join('');
+  let grid=`<div class="hd"></div>`;
+  curDays().forEach(w=>{
+    if(w.other){grid+=`<div class="hd other"><div class="dt">${w.d}(${w.dow})</div><span class="b" style="opacity:.45">—</span></div>`;return;}
+    const t=DAYTYPES[w.type];const sel=w.d===selectedDay?' sel':'';
+    grid+=`<div class="hd${sel}" data-day="${w.d}" onclick="setDay(${w.d})"><div class="dt">${w.d}(${w.dow})</div><span class="b ${t.cls}">${w.hol?w.hol:t.lab}</span></div>`;});
+  bands.forEach(([bk,bl])=>{
+    grid+=`<div class="rh">${bl}</div>`;
+    curDays().forEach(w=>{
+      if(w.other){grid+=`<div class="dcell other"><div class="cap muted">—</div></div>`;return;}
+      const need=DAYTYPES[w.type][bk];
+      const placed=(PLACED[w.d]&&PLACED[w.d][bk])||[];
+      const chips=placed.map(p=>sChip(p.n,p.ty,p.nb,'cell',p.from,p.to,p.w)).join('');
+      const sc=w.d===selectedDay?' selcol':'';
+      const sum=placed.reduce((s,p)=>s+(p.w||(p.nb?0.5:1)),0);
+      grid+=`<div class="dcell${sc}" data-day="${w.d}" data-band="${bk}" data-need="${need}"><div class="cap">配置 ${fmtW(sum)}/${need}</div>${chips}</div>`;
+    });
+  });
+
+  return `<div class="wsel">${wsel}</div>
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:14px 0">
+      <button class="btn gold sm" onclick="autoGen()">⚡ シフトを自動提案</button>
+      <div class="note">日付をクリック→その日の希望者が下に。上からドラッグで配置（ドロップ時に勤務時間と0.5換算を調整）。時刻タップで再編集、削除はゴミ箱へ。</div>
+      <div class="trash" id="trash">🗑 削除</div>
+    </div>
+    <div style="font-weight:700;font-size:12.5px;margin-bottom:8px" id="poolLbl">${dayLabel(selectedDay)} に希望を出した人（上からドラッグ）</div>
+    <div class="pool" id="pool" style="margin-bottom:18px">${poolFor(selectedDay)}</div>
+    <div style="overflow-x:auto"><div class="sgrid" id="sgrid">${grid}</div></div>
+    <div class="legend"><span><span class="sw cs-emp" style="border:1px solid #CDD7EA"></span>社員</span><span><span class="sw cs-part"></span>パート</span><span><span class="sw cs-arb"></span>アルバイト</span><span><span class="nb" style="margin:0">新</span> 新人</span><span><span class="hb" style="margin:0">½</span> 0.5換算</span></div>
+    <div class="modal" id="tModal"><div class="mcard"><div class="mh" id="tName">勤務時間を編集</div>
+      <div class="mrow"><input type="time" id="etFrom"><span class="tilde">〜</span><input type="time" id="etTo"></div>
+      <label class="halfrow"><input type="checkbox" id="etHalf"><span>この枠は <b>0.5換算</b>（短時間・補助・要指導）</span></label>
+      <div class="mbtns"><button class="btn sm" onclick="closeTEdit()">キャンセル</button><button class="btn sm pri" onclick="saveTEdit()">保存</button></div></div></div>`;
+}
+function setWeek(i){weekIdx=i;selectedDay=firstJulyDay(i);draw();}
+function setDay(d){
+  selectedDay=d;
+  document.querySelectorAll('.hd[data-day]').forEach(h=>h.classList.toggle('sel',+h.dataset.day===d));
+  document.querySelectorAll('.dcell').forEach(c=>c.classList.toggle('selcol',+c.dataset.day===d));
+  const pool=document.getElementById('pool'); if(pool)pool.innerHTML=poolFor(d);
+  const lbl=document.getElementById('poolLbl'); if(lbl)lbl.textContent=dayLabel(d)+' に希望を出した人（上からドラッグ）';
+}
+let _editChip=null;
+function _ctClick(e){const ct=e.target.closest('.ct'); if(ct&&ct.closest('.dcell'))openTEdit(ct.closest('.chip-staff'));}
+function openTEdit(chip){
+  _editChip=chip;const mo=document.getElementById('tModal');if(!mo||!chip)return;
+  document.getElementById('tName').textContent=(chip.dataset.name||'')+'さんの勤務時間';
+  document.getElementById('etFrom').value=chip.dataset.from||'17:00';
+  document.getElementById('etTo').value=chip.dataset.to||'23:00';
+  document.getElementById('etHalf').checked=(chip.dataset.w==='0.5');
+  mo.classList.add('show');
+}
+function saveTEdit(){
+  const f=document.getElementById('etFrom').value,t=document.getElementById('etTo').value,half=document.getElementById('etHalf').checked;
+  if(_editChip&&f&&t){
+    _editChip.dataset.from=f;_editChip.dataset.to=t;_editChip.dataset.w=half?0.5:1;
+    const ct=_editChip.querySelector('.ct'); if(ct)ct.textContent=`${f}–${t}`;
+    _editChip.classList.toggle('half',half);
+    let hb=_editChip.querySelector('.hb');
+    if(half&&!hb){hb=document.createElement('span');hb.className='hb';hb.textContent='½';_editChip.querySelector('.cn').appendChild(hb);}
+    if(!half&&hb)hb.remove();
+    _recount();toast('<span class="g">✓</span> 勤務時間・換算を更新');
+  }
+  closeTEdit();
+}
+function closeTEdit(){const mo=document.getElementById('tModal');if(mo)mo.classList.remove('show');_editChip=null;}
+
+function monthView(){
+  const holidays={20:'海の日'};
+  let cells='';
+  for(let b=0;b<2;b++) cells+=`<div class="mday" style="border:none;background:transparent"></div>`;
+  for(let d=1;d<=31;d++){
+    const dow=(d+1)%7;
+    const nclass = (holidays[d]||dow===6)?'sun':dow===5?'sat':'';
+    const busy=[10,11,12,17,18,19,20,24,25,26].includes(d);
+    const need=busy?8:6, got=busy?(d===20?8:7):6;
+    const state = got>=need?'met':'under';
+    cells+=`<div class="mday ${state}" onclick="gotoDay(${d})"><div class="n ${nclass}">${d}${holidays[d]?' <span style="font-size:8px;color:var(--red)">祝</span>':''}</div><div class="cc">${got}/${need}名</div></div>`;
+  }
+  return `<div class="dow" style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:6px">${['月','火','水','木','金','土','日'].map(x=>`<div style="text-align:center;font-size:10.5px;color:var(--muted);font-weight:700">${x}</div>`).join('')}</div>
+    <div class="mgrid">${cells}</div>
+    <p class="note" style="margin-top:12px">日付をクリックすると、その日の週間ビュー（希望プール付き）に移動して編集できます。赤=不足。祝日・日曜は赤、土曜は青。</p>`;
+}
+function gotoDay(d){
+  for(let i=0;i<WEEKS.length;i++){if(WEEKS[i].days.some(x=>!x.other&&x.d===d)){weekIdx=i;break;}}
+  shiftMode='week';selectedDay=d;draw();
+}
+
+function setDtype(k){dtSel=k;renderReqCard();}
+function setShiftMode(m){shiftMode=m;draw();}
+function autoGen(){
+  Object.keys(PLACED).forEach(k=>delete PLACED[k]);
+  const put=(d,band,arr)=>{PLACED[d]=PLACED[d]||{};PLACED[d][band]=arr;};
+  put(20,'noon',[{n:'田中',ty:'emp',from:'11:00',to:'17:00'},{n:'リン',ty:'part',from:'11:00',to:'17:00'},{n:'中村',ty:'arb',from:'11:00',to:'17:00'}]);
+  put(20,'night',[{n:'鈴木',ty:'emp',from:'17:00',to:'23:00'},{n:'山本',ty:'arb',nb:1,from:'17:00',to:'22:00'},{n:'佐藤',ty:'arb',from:'17:00',to:'23:00'},{n:'渡辺',ty:'arb',from:'17:00',to:'23:00'}]);
+  put(24,'night',[{n:'鈴木',ty:'emp',from:'17:00',to:'23:00'},{n:'佐藤',ty:'arb',from:'17:00',to:'23:00'},{n:'小林',ty:'part',from:'17:00',to:'23:00'}]);
+  put(25,'night',[{n:'田中',ty:'emp',from:'17:00',to:'23:00'},{n:'佐藤',ty:'arb',from:'17:00',to:'23:00'},{n:'中村',ty:'arb',from:'17:00',to:'23:00'},{n:'渡辺',ty:'arb',from:'17:00',to:'23:00'}]);
+  put(21,'night',[{n:'鈴木',ty:'emp',from:'17:00',to:'23:00'},{n:'リン',ty:'part',from:'17:00',to:'23:00'}]);
+  draw();
+  toast('<span class="g">⚡</span> 希望と必要数から配置案を生成（新人はトレーナーと同枠）');
+}
+
+/* pointer-based drag (mouse + touch) */
+let _drag=null;
+function _recount(){document.querySelectorAll('.dcell').forEach(c=>{
+  if(c.classList.contains('other'))return;
+  const need=+c.dataset.need;
+  let sum=0; c.querySelectorAll('.chip-staff').forEach(ch=>sum+=parseFloat(ch.dataset.w||'1'));
+  const cap=c.querySelector('.cap'); if(cap)cap.textContent=`配置 ${Number.isInteger(sum)?sum:sum.toFixed(1)}/${need}`;
+  c.classList.toggle('under',sum<need); c.classList.toggle('met',sum>=need&&need>0);
+});}
+function _dStart(e){
+  const chip=e.target.closest('.chip-staff'); if(!chip||!document.getElementById('sgrid'))return;
+  if(e.target.closest('.ct')&&e.target.closest('.dcell'))return; // editing time, not dragging
+  e.preventDefault();
+  _drag={name:chip.dataset.name,ty:chip.dataset.ty,nb:chip.dataset.new,src:chip.dataset.src,from:chip.dataset.from,to:chip.dataset.to,w:chip.dataset.w,node:chip.dataset.src==='cell'?chip:null};
+  const g=chip.cloneNode(true); g.classList.add('ghost'); document.body.appendChild(g); _drag.g=g; _dMove(e);
+}
+function _dMove(e){
+  if(!_drag)return; const pt=e.touches?e.touches[0]:e;
+  _drag.g.style.left=(pt.clientX-24)+'px'; _drag.g.style.top=(pt.clientY-16)+'px';
+  document.querySelectorAll('.dcell.hot,.trash.hot').forEach(x=>x.classList.remove('hot'));
+  const el=document.elementFromPoint(pt.clientX,pt.clientY);
+  const cell=el&&el.closest('.dcell:not(.other)'); const tr=el&&el.closest('.trash');
+  if(cell)cell.classList.add('hot'); if(tr)tr.classList.add('hot');
+}
+function _dEnd(e){
+  if(!_drag)return; const pt=e.changedTouches?e.changedTouches[0]:e;
+  const el=document.elementFromPoint(pt.clientX,pt.clientY);
+  const cell=el&&el.closest('.dcell:not(.other)'); const tr=el&&el.closest('.trash');
+  let dropped=null;
+  if(tr){ if(_drag.src==='cell'&&_drag.node)_drag.node.remove(); }
+  else if(cell){
+    if(_drag.src==='cell'&&_drag.node)_drag.node.remove();
+    const half=(_drag.w==='0.5')||(_drag.w===undefined&&_drag.nb);
+    const nc=document.createElement('div');
+    nc.className='chip-staff cs-'+_drag.ty+(_drag.nb?' newf':'')+(half?' half':'');
+    nc.dataset.name=_drag.name;nc.dataset.ty=_drag.ty;nc.dataset.src='cell';if(_drag.nb)nc.dataset.new='1';
+    nc.dataset.from=_drag.from||'';nc.dataset.to=_drag.to||'';nc.dataset.w=half?0.5:1;
+    nc.innerHTML=`<span class="cn">${_drag.name}${_drag.nb?'<span class="nb">新</span>':''}${half?'<span class="hb">½</span>':''}</span>`+(_drag.from?`<span class="ct">${_drag.from}–${_drag.to}</span>`:'');
+    cell.appendChild(nc); dropped=nc;
+  }
+  _drag.g.remove(); document.querySelectorAll('.dcell.hot,.trash.hot').forEach(x=>x.classList.remove('hot'));
+  _drag=null; _recount();
+  if(dropped) openTEdit(dropped);   // on drop, let manager trim time / set 0.5
+}
+let _dndBound=false;
+function initShiftDnD(){
+  if(!document.getElementById('sgrid')) return;
+  _recount();
+  if(_dndBound) return;               // bind global listeners only once
+  _dndBound=true;
+  document.addEventListener('pointerdown',_dStart);
+  window.addEventListener('pointermove',_dMove);
+  window.addEventListener('pointerup',_dEnd);
+  document.addEventListener('click',_ctClick);
+}
+
+SCREENS.master = () => `<div class="wrap">
+  <div class="page-h"><div><div class="eyebrow">組織 · マスタ</div><h2>スタッフ・店舗</h2></div>
+    <div class="desc">氏名・区分タグ・時給/固定給・交通費・所属店舗・新人フラグを登録。時給や交通費はここで設定します。</div></div>
+  <div class="cols">
+    <div class="card" style="padding:20px;flex:2;min-width:340px">
+      <div style="font-weight:700;margin-bottom:14px">スタッフ登録</div>
+      <div style="overflow-x:auto"><table><thead><tr><th>氏名</th><th>区分タグ</th><th>所属店舗</th><th>給与 / 交通費</th><th></th></tr></thead><tbody>
+        ${STAFF.map((s,i)=>`<tr>
+          <td><b>${s.nm}</b></td>
+          <td>${(s.tags||[s.tl]).map(t=>`<span class="badge ${tagCls(t)}" style="margin:1px 2px">${t}</span>`).join('')}</td>
+          <td class="note">${(s.stores||[s.store]).join(' / ')}</td>
+          <td class="mono">${wageLabel(s)}<div class="note" style="font-family:var(--jp)">交通費 ${s.commute||'—'}</div></td>
+          <td><button class="btn sm" onclick="openStaffEdit(${i})">編集</button></td></tr>`).join('')}
+      </tbody></table></div>
+      <button class="btn pri sm" style="margin-top:14px" onclick="toast('スタッフ追加フォーム（mock）')">＋ スタッフを追加</button>
+      <p class="note" style="margin-top:10px">区分タグは自由（社員・業務委託・パート・アルバイト・新人…）。各行の<b>「編集」</b>で <b>時給/固定給・交通費・タグの付け外し・新人フラグ</b> を登録します。<b>業務委託</b>は打刻・シフト指示・割増計算の対象外に自動分岐（偽装請負回避）。</p>
+    </div>
+    <div class="card" style="padding:20px;flex:1;min-width:280px">
+      <div style="font-weight:700;margin-bottom:14px">店舗登録（GPS）</div>
+      <div class="note" style="margin-bottom:10px">打刻ジオフェンス用に座標と半径を設定。屋内やモール内は半径を広めに。</div>
+      <table><tbody>
+        <tr><td><b>神泉本店</b></td><td class="mono note">35.657, 139.696</td><td class="mono">半径 60m</td></tr>
+        <tr><td><b>渋谷店</b></td><td class="mono note">35.659, 139.700</td><td class="mono">半径 120m</td></tr>
+        <tr><td><b>恵比寿店</b></td><td class="mono note">35.647, 139.710</td><td class="mono">半径 80m</td></tr>
+      </tbody></table>
+      <button class="btn sm" style="margin-top:12px" onclick="toast('地図ピッカー（mock）')">📍 地図から店舗を追加</button>
+    </div>
+  </div>
+  <div class="modal" id="staffModal"><div class="mcard" style="width:360px;text-align:left"><div id="staffModalBody"></div></div></div>
+</div>`;
+let _editStaff=-1;
+function openStaffEdit(i){_editStaff=i;renderStaffModal();document.getElementById('staffModal').classList.add('show');}
+function closeStaffEdit(){const m=document.getElementById('staffModal');if(m)m.classList.remove('show');_editStaff=-1;}
+function renderStaffModal(){
+  const s=STAFF[_editStaff]; if(!s)return; const body=document.getElementById('staffModalBody'); if(!body)return;
+  const contractor=s.wageType==='invoice';
+  body.innerHTML=`
+    <div class="mh">${s.nm} を編集</div>
+    <div class="fld"><label>区分タグ（付け外し自由）</label><div class="tagwrap">
+      ${(s.tags||[]).map(t=>`<span class="tagchip">${t}<span class="x" onclick="staffTagDel('${t}')">×</span></span>`).join('')}
+      <span class="tagadd"><input id="newTag" placeholder="タグ追加" onkeydown="if(event.key==='Enter'){event.preventDefault();staffTagAdd();}"><button onclick="staffTagAdd()">＋</button></span>
+    </div>
+    <div class="note" style="margin-top:5px">よく使う：${['社員','パート','アルバイト','業務委託','新人'].map(t=>`<span class="tagsug" onclick="staffTagQuick('${t}')">＋${t}</span>`).join('')}</div></div>
+    <div class="fld"><label>新人・指導</label>
+      <label class="tgl"><span class="cbx2${s.newbie?' on':''}" onclick="staffToggle('newbie')"></span>新人（要指導・0.5換算）</label>
+      <label class="tgl"><span class="cbx2${s.trainer?' on':''}" onclick="staffToggle('trainer')"></span>指導可（トレーナー）</label></div>
+    <div class="fld"><label>給与</label>
+      <div class="wtype">
+        <label class="rd"><input type="radio" name="wt" ${s.wageType==='hourly'?'checked':''} onclick="staffWtype('hourly')">時給</label>
+        <label class="rd"><input type="radio" name="wt" ${s.wageType==='fixed'?'checked':''} onclick="staffWtype('fixed')">固定給</label>
+        <label class="rd"><input type="radio" name="wt" ${contractor?'checked':''} onclick="staffWtype('invoice')">請求（委託）</label>
+      </div>
+      ${contractor?'<div class="note">稼働自己申告・請求書ベース（打刻/割増なし）</div>':`<div class="amtrow"><input type="number" id="amt" value="${s.amount||0}" onchange="staffSet('amount',+this.value)"><span class="unit">${s.wageType==='hourly'?'円 / 時':'円 / 月'}</span></div>`}</div>
+    <div class="fld"><label>交通費</label><input class="ri" value="${s.commute||''}" placeholder="例）往復 620/日・定期 12,000/月" onchange="staffSet('commute',this.value)"><div class="note" style="margin-top:4px">通勤手当（非課税枠は明細側で自動判定）。</div></div>
+    <div class="mbtns"><button class="btn sm" onclick="closeStaffEdit()">閉じる</button><button class="btn sm pri" onclick="saveStaffEdit()">保存</button></div>`;
+}
+function staffTagAdd(){const inp=document.getElementById('newTag');const v=(inp&&inp.value||'').trim();if(v)staffTagQuick(v);}
+function staffTagQuick(v){const s=STAFF[_editStaff];s.tags=s.tags||[];if(!s.tags.includes(v))s.tags.push(v);if(v==='新人')s.newbie=true;renderStaffModal();}
+function staffTagDel(t){const s=STAFF[_editStaff];s.tags=(s.tags||[]).filter(x=>x!==t);if(t==='新人')s.newbie=false;renderStaffModal();}
+function staffToggle(f){const s=STAFF[_editStaff];s[f]=!s[f];if(f==='newbie'){if(s.newbie){if(!s.tags.includes('新人'))s.tags.push('新人');}else{s.tags=s.tags.filter(x=>x!=='新人');}}renderStaffModal();}
+function staffWtype(w){STAFF[_editStaff].wageType=w;renderStaffModal();}
+function staffSet(k,v){STAFF[_editStaff][k]=v;}
+function saveStaffEdit(){const s=STAFF[_editStaff];s.wage=wageLabel(s);s.tl=(s.tags&&s.tags[0])||s.tl;closeStaffEdit();draw();toast('<span class="g">✓</span> スタッフ情報を保存（mock）');}
+
+SCREENS.perm = () => {
+  const cols=['エリアM','店長','スタッフ'];
+  const rows=[
+    ['今日のシフト表（¥なし）',[1,1,1]],
+    ['打刻補正の承認',[1,1,0]],
+    ['シフト作成・自動生成',[1,1,0]],
+    ['人件費 集計¥',[1,1,0]],
+    ['個人別 賃金・時給',[1,0,0]],
+    ['他人の給与明細',[1,0,0]],
+    ['スタッフ・店舗・時給の登録',[1,0,0]]
+  ];
+  return `<div class="wrap">
+    <div class="page-h"><div><div class="eyebrow">テナント設定 · オーナー専用</div><h2>権限設定</h2></div>
+      <div class="desc">機能ごとに「見せる／見せない」をオーナーが選択。スコープ（自店だけ 等）は常に自動強制。</div></div>
+    <div class="card" style="padding:6px 4px">
+      <table><thead><tr><th style="width:46%">権限</th><th style="text-align:center">オーナー</th>${cols.map(c=>`<th style="text-align:center">${c}</th>`).join('')}</tr></thead><tbody>
+        ${rows.map(r=>`<tr><td><b>${r[0]}</b></td>
+          <td style="text-align:center"><span class="cbx lock on" title="オーナーは常時フル・変更不可"></span></td>
+          ${r[1].map(v=>`<td style="text-align:center"><span class="cbx${v?' on':''}" onclick="this.classList.toggle('on');toast('権限を更新しました（mock）')"></span></td>`).join('')}
+        </tr>`).join('')}
+      </tbody></table>
+    </div>
+    <p class="note" style="margin-top:14px">初期値は「揉めにくい控えめ」から。例：<b>店長 × 個人賃金 = OFF</b>（集計¥は見えるが個人時給は伏せる）。うちは店長にも任せる、なら1クリックでON。<br>オーナー行はロックで消せません（自分をロックアウトしない）。自分の打刻・シフト・明細は全員が常に閲覧できます。</p>
+  </div>`;
+};
+
+SCREENS.csv = () => `<div class="wrap">
+  <div class="page-h"><div><div class="eyebrow">エクスポート</div><h2>CSV抽出</h2></div>
+    <div class="desc">DBが正。チェックした条件でCSVを出力。プレビュー確認 → 抽出。</div></div>
+  <div class="cols">
+    <div class="card" style="padding:20px;flex:1;min-width:260px">
+      <div style="font-weight:700;margin-bottom:12px">対象店舗</div>
+      <div class="pill-row" style="margin-bottom:18px">
+        <span class="pill on" onclick="this.classList.toggle('on')">神泉本店</span>
+        <span class="pill" onclick="this.classList.toggle('on')">渋谷店</span>
+        <span class="pill" onclick="this.classList.toggle('on')">恵比寿店</span>
+      </div>
+      <div style="font-weight:700;margin-bottom:12px">雇用形態</div>
+      <div class="pill-row" style="margin-bottom:18px">
+        <span class="pill on" onclick="this.classList.toggle('on')">社員</span>
+        <span class="pill on" onclick="this.classList.toggle('on')">パート</span>
+        <span class="pill on" onclick="this.classList.toggle('on')">アルバイト</span>
+        <span class="pill" onclick="this.classList.toggle('on')">業務委託</span>
+      </div>
+      <div style="font-weight:700;margin-bottom:12px">期間</div>
+      <div class="pill-row"><span class="pill on">2026-07-01 〜 07-31</span></div>
+    </div>
+    <div class="card" style="padding:20px;flex:1;min-width:260px">
+      <div style="font-weight:700;margin-bottom:12px">出力する項目</div>
+      ${['氏名','店舗','出勤','退勤','休憩','実働','深夜時間','時間外','時給/固定','支給見込','交通費'].map((c,i)=>`<label style="display:flex;align-items:center;gap:10px;padding:6px 0;font-size:13px;cursor:pointer"><span class="cbx${i<8?' on':''}" onclick="this.classList.toggle('on')"></span>${c}</label>`).join('')}
+    </div>
+  </div>
+  <div class="sec-h"><h3>プレビュー</h3><div class="rule"></div><div class="cnt">先頭 3 行</div></div>
+  <div class="card"><table><thead><tr><th>氏名</th><th>店舗</th><th>出勤</th><th>退勤</th><th>実働</th><th>深夜</th><th>支給見込</th></tr></thead><tbody>
+    <tr><td>佐藤 美咲</td><td>神泉本店</td><td class="mono">2026-07-08 11:00</td><td class="mono">22:14</td><td class="mono">10.7h</td><td class="mono">0.2h</td><td class="mono yen">14,300</td></tr>
+    <tr><td>山本 蓮</td><td>神泉本店</td><td class="mono">2026-07-08 17:03</td><td class="mono">23:01</td><td class="mono">5.5h</td><td class="mono">1.0h</td><td class="mono yen">7,200</td></tr>
+    <tr><td>田中 誠</td><td>神泉本店</td><td class="mono">2026-07-08 10:02</td><td class="mono">19:30</td><td class="mono">8.5h</td><td class="mono">0h</td><td class="mono yen">固定</td></tr>
+  </tbody></table></div>
+  <button class="btn pri" style="margin-top:16px" onclick="toast('<span class=g>⬇</span> CSVを抽出しました（mock）')">⬇ CSVを抽出</button>
+</div>`;
+
+SCREENS.qr = () => `<div class="wrap">
+  <div class="page-h"><div><div class="eyebrow">店舗の据置端末</div><h2>店舗QR表示</h2></div>
+    <div class="desc">カウンターのタブレットに常時表示。60秒でローテーション。スタッフが自分のスマホでスキャン。</div></div>
+  <div class="cols" style="align-items:center">
+    <div class="card" style="padding:26px;text-align:center;flex:0 0 auto">
+      <div style="font-weight:900;font-size:15px;margin-bottom:4px">神泉本店</div>
+      <div class="note" style="margin-bottom:16px">出勤・退勤はこのQRをスキャン</div>
+      <div class="qrbox"><div class="qr" id="qrgrid"></div></div>
+      <div class="qrring"><span class="num" id="qrnum">60</span><div class="bar"><i id="qrbar" style="width:100%"></i></div></div>
+      <div class="note" style="margin-top:8px">トークンは60秒で失効（スクショ流用を防止）</div>
+    </div>
+    <div style="flex:1;min-width:280px">
+      <div class="card" style="padding:20px">
+        <div style="font-weight:700;margin-bottom:10px">この仕組みが防ぐこと</div>
+        <div class="note" style="line-height:1.9">
+          <b style="color:var(--ink)">スクショ流用</b> … 60秒で失効。古いQRは無効。<br>
+          <b style="color:var(--ink)">自宅から打刻</b> … 現在のQRは店の画面にしか出ない。<br>
+          <b style="color:var(--ink)">代理打刻</b> … 打刻はスキャンした本人のログインに紐づく。<br>
+          <b style="color:var(--ink)">GPS</b> … 店舗の座標±半径で位置検証。圏外は「位置未確認」フラグ付きで打刻は通す（給与を止めない）。
+        </div>
+      </div>
+    </div>
+  </div>
+</div>`;
+
+/* ---- staff screens ---- */
+SCREENS.punch = () => `<div class="wrap">
+  <div class="page-h"><div><div class="eyebrow">佐藤 美咲 · 神泉本店</div><h2>打刻</h2></div>
+    <div class="desc">店のQRをスキャンして出勤・退勤。</div></div>
+  <div class="cols">
+    <div class="phone">
+      <div class="screen">
+        <div class="pnav"><span>SHIN 勤怠</span><span class="mn" id="pdate"></span></div>
+        <div class="pbody">
+          <div class="bigclock" id="bigclock">--:--:--</div>
+          <div class="bigdate">2026年7月9日（水）</div>
+          <div class="gps ok">📍 神泉本店の圏内（誤差 12m）</div>
+          <div class="note" style="text-align:center;margin-bottom:6px">QRをスキャンしました ✓</div>
+          <div class="punchbtns">
+            <button class="pbtn inb" onclick="toast('<span class=g>✓</span> 出勤を記録しました（mock）')">出勤</button>
+            <button class="pbtn brkb" onclick="toast('休憩を開始しました（mock）')">休憩 開始 / 終了</button>
+            <button class="pbtn outb" onclick="toast('退勤を記録しました（mock）')">退勤</button>
+          </div>
+          <div class="scan-hint">位置情報は打刻の瞬間のみ取得し、常時追跡はしません。</div>
+        </div>
+      </div>
+    </div>
+    <div style="flex:1;min-width:260px">
+      <div class="card" style="padding:20px">
+        <div style="font-weight:700;margin-bottom:8px">今日のあなた</div>
+        <table><tbody>
+          <tr><td>状態</td><td><span class="st st-br"><span class="dot"></span>休憩中</span></td></tr>
+          <tr><td>出勤</td><td class="mono">11:00</td></tr>
+          <tr><td>休憩</td><td class="mono">14:30〜</td></tr>
+          <tr><td>予定退勤</td><td class="mono">22:00</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+  </div>
+</div>`;
+
+SCREENS.myshift = () => `<div class="wrap">
+  <div class="page-h"><div><div class="eyebrow">神泉本店 · 本日</div><h2>今日のシフト</h2></div>
+    <div class="desc">今日いっしょに入るメンバー（時給・給与は表示されません）。</div></div>
+  <div class="card"><table><thead><tr><th>氏名</th><th>ポジション</th><th>時間</th><th>状態</th></tr></thead><tbody>
+    <tr><td><b>鈴木 大輔</b></td><td>フロア</td><td class="mono">10:00–</td><td><span class="st st-in"><span class="dot"></span>出勤中</span></td></tr>
+    <tr><td><b>田中 誠</b></td><td>キッチン</td><td class="mono">10:00–</td><td><span class="st st-in"><span class="dot"></span>出勤中</span></td></tr>
+    <tr><td><b>佐藤 美咲</b>（あなた）</td><td>フロア</td><td class="mono">11:00–22:00</td><td><span class="st st-br"><span class="dot"></span>休憩中</span></td></tr>
+    <tr><td><b>山本 蓮</b><span class="newbie">新</span></td><td>フロア</td><td class="mono">17:00–</td><td><span class="st st-plan"><span class="dot"></span>予定</span></td></tr>
+  </tbody></table></div>
+</div>`;
+
+SCREENS.request = () => {
+  let cells='';
+  for(let d=1;d<=30;d++){
+    const want=[12,13,19,20,26,27].includes(d);
+    const off=[8,9,15].includes(d);
+    cells+=`<div onclick="this.classList.toggle('sel');this.style.background=this.classList.contains('sel')?'var(--green-soft)':'#fff';this.style.borderColor=this.classList.contains('sel')?'var(--green)':'var(--line-2)'" style="aspect-ratio:1;border:1px solid ${want?'var(--green)':'var(--line-2)'};background:${want?'var(--green-soft)':'#fff'};border-radius:6px;padding:6px;cursor:pointer;font-size:12px" class="${want?'sel':''}">
+      <div class="mono">${d}</div>${want?'<div style="font-size:9px;color:var(--green);font-weight:700;margin-top:2px">希望</div>':off?'<div style="font-size:9px;color:var(--red);font-weight:700;margin-top:2px">×</div>':''}</div>`;
+  }
+  return `<div class="wrap">
+    <div class="page-h"><div><div class="eyebrow">2026年7月 · 希望提出</div><h2>希望申請</h2></div>
+      <div class="desc">働きたい日をタップ。集約後、店長が必要人員に合わせて確定します。</div></div>
+    <div class="card" style="padding:20px">
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:8px">${['月','火','水','木','金','土','日'].map(d=>`<div style="text-align:center;font-size:11px;color:var(--muted);font-weight:700">${d}</div>`).join('')}</div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px">${cells}</div>
+      <button class="btn pri" style="margin-top:18px" onclick="toast('<span class=g>✓</span> 希望を提出しました（mock）')">希望を提出</button>
+    </div>
+  </div>`;
+};
+
+SCREENS.pay = () => `<div class="wrap">
+  <div class="page-h"><div><div class="eyebrow">佐藤 美咲 · 2026年6月分</div><h2>給与明細</h2></div>
+    <div class="desc">総支給まで自動計算。控除計算は外部（freee等）連携で（P4）。</div></div>
+  <div class="card" style="max-width:520px;padding:24px">
+    <table><tbody>
+      <tr><td>実働時間</td><td class="mono" style="text-align:right">86.5 h</td></tr>
+      <tr><td>時給</td><td class="mono yen" style="text-align:right">1,300</td></tr>
+      <tr><td>基本支給</td><td class="mono yen" style="text-align:right">112,450</td></tr>
+      <tr><td>深夜手当（+25%）</td><td class="mono yen" style="text-align:right">3,900</td></tr>
+      <tr><td>交通費（非課税）</td><td class="mono yen" style="text-align:right">8,400</td></tr>
+      <tr><td>チップ配分</td><td class="mono yen" style="text-align:right">2,100</td></tr>
+      <tr style="border-top:2px solid var(--ink)"><td style="font-weight:900;padding-top:14px">総支給</td><td class="mono yen" style="text-align:right;font-weight:900;font-size:18px;padding-top:14px">126,850</td></tr>
+    </tbody></table>
+    <button class="btn" style="margin-top:18px" onclick="toast('PDFを生成しました（mock）')">明細PDFを表示</button>
+  </div>
+</div>`;
+
+/* ---------------- live bits ---------------- */
+function afterDraw(){
+  // QR grid
+  const g=document.getElementById('qrgrid');
+  if(g) buildQR(g);
+  const bc=document.getElementById('bigclock'); if(bc) tickBig();
+  const pd=document.getElementById('pdate'); if(pd) pd.textContent='07/09';
+  if(state.screen==='shift'&&shiftMode==='week') initShiftDnD();
+}
+function buildQR(g){
+  g.innerHTML='';
+  const finder=(r,c)=> (r<7&&c<7)||(r<7&&c>13)||(r>13&&c<7);
+  for(let r=0;r<21;r++)for(let c=0;c<21;c++){
+    const i=document.createElement('i');
+    let on;
+    if(finder(r,c)){ const rr=r%14, cc=c%14; on=(rr===0||rr===6||cc===0||cc===6||(rr>=2&&rr<=4&&cc>=2&&cc<=4)); }
+    else on=Math.random()>0.55;
+    if(on)i.className='f'; g.appendChild(i);
+  }
+}
+let qrN=60;
+setInterval(()=>{
+  const num=document.getElementById('qrnum'), bar=document.getElementById('qrbar'), grid=document.getElementById('qrgrid');
+  if(!num) return;
+  qrN--; if(qrN<=0){qrN=60; if(grid)buildQR(grid);}
+  num.textContent=qrN; if(bar)bar.style.width=(qrN/60*100)+'%';
+},950);
+
+function tickBig(){const el=document.getElementById('bigclock');if(!el)return;const d=new Date();el.textContent=[d.getHours(),d.getMinutes(),d.getSeconds()].map(n=>String(n).padStart(2,'0')).join(':')}
+setInterval(tickBig,1000);
+
+function topClock(){const d=new Date();$('#clock').innerHTML='2026.07.09 <b>'+[d.getHours(),d.getMinutes()].map(n=>String(n).padStart(2,'0')).join(':')+'</b>'}
+setInterval(topClock,1000); topClock();
+
+/* ---------------- init ---------------- */
+document.querySelectorAll('#roleBtns button').forEach(b=>b.onclick=()=>setRole(b.dataset.r));
+setRole('owner');
+</script>
+</body>
+</html>

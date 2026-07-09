@@ -1,0 +1,867 @@
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
+
+export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.5"
+  }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+  public: {
+    Tables: {
+      access_logs: {
+        Row: {
+          action: string
+          created_at: string
+          id: string
+          target: string | null
+          tenant_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          id?: string
+          target?: string | null
+          tenant_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          id?: string
+          target?: string | null
+          tenant_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "access_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      areas: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "areas_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      attendance: {
+        Row: {
+          clock_in_at: string
+          clock_out_at: string | null
+          created_at: string
+          gps_lat: number | null
+          gps_lng: number | null
+          gps_status: string
+          id: string
+          source: string
+          staff_id: string
+          store_id: string
+          tenant_id: string
+        }
+        Insert: {
+          clock_in_at?: string
+          clock_out_at?: string | null
+          created_at?: string
+          gps_lat?: number | null
+          gps_lng?: number | null
+          gps_status?: string
+          id?: string
+          source?: string
+          staff_id: string
+          store_id: string
+          tenant_id: string
+        }
+        Update: {
+          clock_in_at?: string
+          clock_out_at?: string | null
+          created_at?: string
+          gps_lat?: number | null
+          gps_lng?: number | null
+          gps_status?: string
+          id?: string
+          source?: string
+          staff_id?: string
+          store_id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attendance_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attendance_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attendance_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      attendance_breaks: {
+        Row: {
+          attendance_id: string
+          break_end_at: string | null
+          break_start_at: string
+          id: string
+        }
+        Insert: {
+          attendance_id: string
+          break_end_at?: string | null
+          break_start_at?: string
+          id?: string
+        }
+        Update: {
+          attendance_id?: string
+          break_end_at?: string | null
+          break_start_at?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attendance_breaks_attendance_id_fkey"
+            columns: ["attendance_id"]
+            isOneToOne: false
+            referencedRelation: "attendance"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      attendance_corrections: {
+        Row: {
+          approved_by: string | null
+          attendance_id: string
+          created_at: string
+          id: string
+          new_value: string | null
+          old_value: string | null
+          reason: string | null
+          requested_by: string | null
+          status: string
+          target_field: string
+          tenant_id: string
+        }
+        Insert: {
+          approved_by?: string | null
+          attendance_id: string
+          created_at?: string
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+          reason?: string | null
+          requested_by?: string | null
+          status?: string
+          target_field: string
+          tenant_id: string
+        }
+        Update: {
+          approved_by?: string | null
+          attendance_id?: string
+          created_at?: string
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+          reason?: string | null
+          requested_by?: string | null
+          status?: string
+          target_field?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attendance_corrections_attendance_id_fkey"
+            columns: ["attendance_id"]
+            isOneToOne: false
+            referencedRelation: "attendance"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attendance_corrections_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      employment_kinds: {
+        Row: {
+          applies_premium: boolean
+          created_at: string
+          id: string
+          is_hourly: boolean
+          label: string
+          requires_clock: boolean
+          tenant_id: string
+        }
+        Insert: {
+          applies_premium?: boolean
+          created_at?: string
+          id?: string
+          is_hourly?: boolean
+          label: string
+          requires_clock?: boolean
+          tenant_id: string
+        }
+        Update: {
+          applies_premium?: boolean
+          created_at?: string
+          id?: string
+          is_hourly?: boolean
+          label?: string
+          requires_clock?: boolean
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employment_kinds_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      holidays: {
+        Row: {
+          holiday_date: string
+          name: string
+        }
+        Insert: {
+          holiday_date: string
+          name: string
+        }
+        Update: {
+          holiday_date?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      memberships: {
+        Row: {
+          created_at: string
+          id: string
+          role: string
+          scope_area_id: string | null
+          scope_store_id: string | null
+          staff_id: string | null
+          tenant_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: string
+          scope_area_id?: string | null
+          scope_store_id?: string | null
+          staff_id?: string | null
+          tenant_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: string
+          scope_area_id?: string | null
+          scope_store_id?: string | null
+          staff_id?: string | null
+          tenant_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "memberships_scope_area_id_fkey"
+            columns: ["scope_area_id"]
+            isOneToOne: false
+            referencedRelation: "areas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "memberships_scope_store_id_fkey"
+            columns: ["scope_store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "memberships_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "memberships_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      positions: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          store_id: string | null
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          store_id?: string | null
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          store_id?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "positions_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "positions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      qr_tokens: {
+        Row: {
+          expires_at: string
+          id: string
+          issued_at: string
+          store_id: string
+          token: string
+        }
+        Insert: {
+          expires_at: string
+          id?: string
+          issued_at?: string
+          store_id: string
+          token: string
+        }
+        Update: {
+          expires_at?: string
+          id?: string
+          issued_at?: string
+          store_id?: string
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qr_tokens_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      role_permissions: {
+        Row: {
+          allowed: boolean
+          id: string
+          permission_key: string
+          role: string
+          tenant_id: string
+        }
+        Insert: {
+          allowed?: boolean
+          id?: string
+          permission_key: string
+          role: string
+          tenant_id: string
+        }
+        Update: {
+          allowed?: boolean
+          id?: string
+          permission_key?: string
+          role?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "role_permissions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff: {
+        Row: {
+          created_at: string
+          email: string | null
+          full_name: string
+          id: string
+          phone: string | null
+          status: string
+          tenant_id: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          full_name: string
+          id?: string
+          phone?: string | null
+          status?: string
+          tenant_id: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          full_name?: string
+          id?: string
+          phone?: string | null
+          status?: string
+          tenant_id?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_assignments: {
+        Row: {
+          commute_amount: number
+          commute_type: string
+          created_at: string
+          employment_kind_id: string | null
+          hourly_wage: number | null
+          id: string
+          is_active: boolean
+          is_newbie: boolean
+          is_trainer: boolean
+          monthly_fixed: number | null
+          position_default_id: string | null
+          staff_id: string
+          store_id: string
+          tenant_id: string
+          wage_type: string
+        }
+        Insert: {
+          commute_amount?: number
+          commute_type?: string
+          created_at?: string
+          employment_kind_id?: string | null
+          hourly_wage?: number | null
+          id?: string
+          is_active?: boolean
+          is_newbie?: boolean
+          is_trainer?: boolean
+          monthly_fixed?: number | null
+          position_default_id?: string | null
+          staff_id: string
+          store_id: string
+          tenant_id: string
+          wage_type?: string
+        }
+        Update: {
+          commute_amount?: number
+          commute_type?: string
+          created_at?: string
+          employment_kind_id?: string | null
+          hourly_wage?: number | null
+          id?: string
+          is_active?: boolean
+          is_newbie?: boolean
+          is_trainer?: boolean
+          monthly_fixed?: number | null
+          position_default_id?: string | null
+          staff_id?: string
+          store_id?: string
+          tenant_id?: string
+          wage_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_assignments_employment_kind_id_fkey"
+            columns: ["employment_kind_id"]
+            isOneToOne: false
+            referencedRelation: "employment_kinds"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_assignments_position_default_id_fkey"
+            columns: ["position_default_id"]
+            isOneToOne: false
+            referencedRelation: "positions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_assignments_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_assignments_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_assignments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_tags: {
+        Row: {
+          created_at: string
+          id: string
+          staff_id: string
+          tag: string
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          staff_id: string
+          tag: string
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          staff_id?: string
+          tag?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_tags_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_tags_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      stores: {
+        Row: {
+          area_id: string | null
+          created_at: string
+          geofence_radius_m: number
+          gps_policy: string
+          id: string
+          lat: number | null
+          lng: number | null
+          name: string
+          settings: Json
+          tenant_id: string
+          timezone: string
+        }
+        Insert: {
+          area_id?: string | null
+          created_at?: string
+          geofence_radius_m?: number
+          gps_policy?: string
+          id?: string
+          lat?: number | null
+          lng?: number | null
+          name: string
+          settings?: Json
+          tenant_id: string
+          timezone?: string
+        }
+        Update: {
+          area_id?: string | null
+          created_at?: string
+          geofence_radius_m?: number
+          gps_policy?: string
+          id?: string
+          lat?: number | null
+          lng?: number | null
+          name?: string
+          settings?: Json
+          tenant_id?: string
+          timezone?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stores_area_id_fkey"
+            columns: ["area_id"]
+            isOneToOne: false
+            referencedRelation: "areas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stores_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenants: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          settings: Json
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          settings?: Json
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          settings?: Json
+        }
+        Relationships: []
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      app_can_store: { Args: { sid: string }; Returns: boolean }
+      app_has_perm: { Args: { perm: string; tid: string }; Returns: boolean }
+      app_is_member: { Args: { tid: string }; Returns: boolean }
+      app_role: { Args: { tid: string }; Returns: string }
+      app_staff_id: { Args: { tid: string }; Returns: string }
+      seed_role_permissions: { Args: { tid: string }; Returns: undefined }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+}
+
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
+  public: {
+    Enums: {},
+  },
+} as const

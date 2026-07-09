@@ -1,0 +1,604 @@
+:root {
+  --ink: #1a2233; /* 藍墨 sidebar / text */
+  --ink-2: #3a4557;
+  --indigo: #22345b; /* 藍 primary */
+  --indigo-deep: #182642;
+  --paper: #ebe9e3; /* cool paper canvas */
+  --card: #ffffff;
+  --line: #d9d6ce; /* hairline */
+  --line-2: #e7e4dc;
+  --gold: #ce9526; /* 山吹 accent, restrained */
+  --gold-soft: #f3e4c0;
+  --green: #2e7d5b;
+  --green-soft: #dbeee3;
+  --red: #bc4a32;
+  --red-soft: #f3ddd5;
+  --muted: #8a8577;
+  --radius: 7px;
+  --mono: 'Space Mono', ui-monospace, monospace;
+  --jp: 'Zen Kaku Gothic New', system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  font-family: var(--jp);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--gold-soft);
+}
+
+.centered-note {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  padding: 24px;
+  font-size: 13px;
+}
+
+/* 暖簾モチーフ: 横棒4本、2本目が山吹 */
+.noren {
+  display: flex;
+  gap: 3px;
+  margin-bottom: 12px;
+}
+
+.noren i {
+  height: 5px;
+  flex: 1;
+  border-radius: 2px;
+  background: #2e3a52;
+}
+
+.noren i:nth-child(2) {
+  background: var(--gold);
+}
+
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: var(--gold);
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 5px;
+}
+
+/* ---------- ログイン ---------- */
+.login-page {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 30px 16px;
+  background: var(--ink);
+  background-image:
+    radial-gradient(circle at 18% 12%, #24304a 0, transparent 46%),
+    radial-gradient(circle at 82% 88%, #1d283e 0, transparent 46%);
+}
+
+.login-card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 30px 28px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  box-shadow: 0 24px 50px -20px rgb(20 25 40 / 55%);
+}
+
+.login-brand .noren i {
+  background: #c7c3b8;
+}
+
+.login-brand .noren i:nth-child(2) {
+  background: var(--gold);
+}
+
+.login-brand .noren {
+  width: 70px;
+}
+
+.login-brand h1 {
+  font-size: 22px;
+  font-weight: 900;
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+
+.login-brand h1 span {
+  color: var(--gold);
+}
+
+.login-sub {
+  margin: -8px 0 4px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.login-error {
+  margin: 0;
+  background: var(--red-soft);
+  border-left: 3px solid var(--red);
+  color: var(--red);
+  padding: 10px 12px;
+  border-radius: 5px;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field span {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.field input {
+  font-family: var(--jp);
+  font-size: 14px;
+  color: var(--ink);
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--card);
+}
+
+.field input:focus-visible {
+  outline: 3px solid var(--gold-soft);
+  outline-offset: 1px;
+  border-color: var(--indigo);
+}
+
+.btn-primary {
+  font-family: var(--jp);
+  font-size: 13px;
+  font-weight: 700;
+  margin-top: 6px;
+  padding: 11px 16px;
+  border: 1px solid var(--indigo);
+  border-radius: 6px;
+  background: var(--indigo);
+  color: #fff;
+  cursor: pointer;
+  transition: 0.12s;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--indigo-deep);
+}
+
+.btn-primary:focus-visible {
+  outline: 3px solid var(--gold-soft);
+  outline-offset: 1px;
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* ---------- シェル ---------- */
+.shell {
+  display: flex;
+  min-height: 100dvh;
+}
+
+.side {
+  width: 236px;
+  flex: 0 0 236px;
+  background: var(--ink);
+  color: #c9ceda;
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  position: sticky;
+  top: 0;
+}
+
+.side .brand {
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid #2a3346;
+}
+
+.side .brand h1 {
+  font-size: 19px;
+  font-weight: 900;
+  color: #fff;
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+
+.side .brand h1 span {
+  color: var(--gold);
+}
+
+.side .brand .sub {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: #7b8499;
+  margin-top: 2px;
+  letter-spacing: 0.14em;
+}
+
+.shell-nav {
+  padding: 10px 12px;
+  flex: 1;
+  overflow: auto;
+}
+
+.navlab {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: #5e6782;
+  padding: 8px 8px 6px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  padding: 9px 11px;
+  border-radius: 6px;
+  color: #b7becd;
+  text-decoration: none;
+  font-size: 13.5px;
+  font-weight: 500;
+  margin-bottom: 2px;
+  position: relative;
+}
+
+.nav-item:hover {
+  background: #232c40;
+  color: #fff;
+}
+
+.nav-item.is-active {
+  background: var(--indigo);
+  color: #fff;
+}
+
+.nav-item.is-active::before {
+  content: '';
+  position: absolute;
+  left: -12px;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  background: var(--gold);
+  border-radius: 0 3px 3px 0;
+}
+
+.side-foot {
+  padding: 14px 18px;
+  border-top: 1px solid #2a3346;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: #6e7791;
+}
+
+.shell-main {
+  flex: 1;
+  min-width: 0;
+  height: 100dvh;
+  overflow: auto;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: rgb(235 233 227 / 86%);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--line);
+  padding: 13px 30px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.tenant-name {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.role-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 20px;
+  line-height: 1.5;
+  white-space: nowrap;
+  background: #e5e9f2;
+  color: var(--indigo);
+}
+
+.role-badge.role-staff {
+  background: #ede7e2;
+  color: #7a6a5a;
+}
+
+.scope {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.scope .tag {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.1em;
+}
+
+.scope-chip {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  background: var(--card);
+  border-radius: 6px;
+  padding: 5px 10px;
+}
+
+.who {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-left: 16px;
+  border-left: 1px solid var(--line);
+}
+
+.who .av {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--indigo);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.who .nm {
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.who .rl {
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
+.btn-ghost {
+  font-family: var(--jp);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 11px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  cursor: pointer;
+  transition: 0.12s;
+}
+
+.btn-ghost:hover {
+  border-color: #bbb6aa;
+}
+
+.btn-ghost:focus-visible {
+  outline: 3px solid var(--gold-soft);
+  outline-offset: 1px;
+}
+
+.wrap {
+  padding: 26px 30px 60px;
+  max-width: 1180px;
+}
+
+.page-h {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.page-h h1 {
+  font-size: 23px;
+  font-weight: 900;
+  margin: 0;
+  letter-spacing: 0.01em;
+}
+
+.page-h .desc {
+  font-size: 12.5px;
+  color: var(--muted);
+  padding-bottom: 3px;
+}
+
+/* ---------- カード / KPI ---------- */
+.card-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.kpi {
+  padding: 16px 17px;
+}
+
+.kpi .k {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.05em;
+  margin-bottom: 9px;
+}
+
+.kpi .v {
+  font-family: var(--mono);
+  font-size: 27px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ink);
+}
+
+.kpi .v small {
+  font-size: 14px;
+  color: var(--muted);
+  margin-left: 3px;
+}
+
+.kpi .v.v-text {
+  font-family: var(--jp);
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.kpi .d {
+  font-size: 11px;
+  margin-top: 8px;
+  color: var(--muted);
+}
+
+.card-list {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.card-list li {
+  font-size: 12.5px;
+  color: var(--ink-2);
+  padding-top: 6px;
+  border-top: 1px solid var(--line-2);
+}
+
+.card-list li:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.card-list .empty {
+  color: var(--muted);
+  border-top: none;
+}
+
+.sec-h {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 26px 0 12px;
+}
+
+.sec-h .rule {
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+.note {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+/* ---------- 準備中 ---------- */
+.placeholder h1 {
+  font-size: 23px;
+  font-weight: 900;
+  margin: 0;
+}
+
+.placeholder .note {
+  margin-top: 10px;
+}
+
+@media (max-width: 860px) {
+  .shell {
+    flex-direction: column;
+  }
+
+  .side {
+    width: 100%;
+    flex: none;
+    height: auto;
+    position: static;
+  }
+
+  .shell-nav {
+    display: flex;
+    overflow-x: auto;
+    padding: 8px 12px;
+  }
+
+  .nav-item {
+    white-space: nowrap;
+    margin-bottom: 0;
+  }
+
+  .nav-item.is-active::before {
+    display: none;
+  }
+
+  .navlab,
+  .side-foot {
+    display: none;
+  }
+
+  .shell-main {
+    height: auto;
+  }
+
+  .topbar,
+  .wrap {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .who {
+    margin-left: 0;
+    padding-left: 0;
+    border-left: none;
+  }
+}

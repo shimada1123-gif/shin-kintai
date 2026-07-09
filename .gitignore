@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.output/
+.nitro/
+.wrangler/
+.vite/
+
+# 環境変数（実値はコミットしない）
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# OS / editor
+.DS_Store
+*.log

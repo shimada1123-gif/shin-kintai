@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SHIN 勤怠 — スタッフアプリ（レスポンシブ）</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#1A2233; --ink-2:#3A4557;
+    --indigo:#22345B; --indigo-deep:#182642;
+    --paper:#EBE9E3; --card:#FFFFFF;
+    --line:#D9D6CE; --line-2:#E7E4DC;
+    --gold:#CE9526; --gold-soft:#F3E4C0;
+    --green:#2E7D5B; --green-soft:#DBEEE3;
+    --red:#BC4A32; --red-soft:#F3DDD5;
+    --muted:#8A8577;
+    --mono:"Space Mono",ui-monospace,monospace;
+    --jp:"Zen Kaku Gothic New",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{font-family:var(--jp);background:#DEDCD5;color:var(--ink);-webkit-font-smoothing:antialiased;
+    background-image:radial-gradient(circle at 20% 10%,#E9E7E0 0,transparent 45%),radial-gradient(circle at 80% 90%,#E5E3DB 0,transparent 45%);
+    min-height:100vh;padding:30px 16px 60px}
+  ::selection{background:var(--gold-soft)}
+
+  .stage{max-width:1080px;margin:0 auto}
+  .head{text-align:center;margin-bottom:22px}
+  .head .noren{display:flex;gap:3px;width:70px;margin:0 auto 12px}
+  .head .noren i{height:5px;flex:1;border-radius:2px;background:#C7C3B8}
+  .head .noren i:nth-child(2){background:var(--gold)}
+  .head h1{font-size:22px;font-weight:900;margin:0}
+  .head h1 span{color:var(--gold)}
+  .head p{color:var(--muted);font-size:13px;margin:6px 0 0}
+
+  .toggle{display:flex;gap:6px;justify-content:center;margin:18px 0 26px}
+  .toggle button{font-family:var(--jp);font-size:13px;font-weight:700;padding:9px 18px;border-radius:22px;border:1px solid var(--line);background:var(--card);color:var(--ink-2);cursor:pointer;display:flex;align-items:center;gap:7px;transition:.15s}
+  .toggle button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .toggle button:focus-visible{outline:3px solid var(--gold-soft)}
+
+  /* ---------- device frames ---------- */
+  .devwrap{display:flex;justify-content:center}
+
+  .phone{width:392px;background:#0E1526;border-radius:42px;padding:12px;box-shadow:0 40px 80px -30px rgba(20,25,40,.6);position:relative}
+  .phone::before{content:"";position:absolute;top:20px;left:50%;transform:translateX(-50%);width:110px;height:26px;background:#0E1526;border-radius:0 0 16px 16px;z-index:6}
+  .phone .viewport{background:var(--paper);border-radius:32px;overflow:hidden;height:748px;display:flex;flex-direction:column;position:relative}
+
+  .web{width:100%;max-width:1000px;background:var(--card);border-radius:14px;overflow:hidden;box-shadow:0 40px 80px -34px rgba(20,25,40,.4);border:1px solid var(--line)}
+  .web .chrome{background:#E4E2DB;padding:11px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line)}
+  .web .chrome .dots{display:flex;gap:6px}
+  .web .chrome .dots i{width:11px;height:11px;border-radius:50%;background:#C2BEB2}
+  .web .chrome .url{flex:1;background:var(--card);border-radius:7px;padding:6px 14px;font-family:var(--mono);font-size:12px;color:var(--muted);border:1px solid var(--line)}
+  .web .viewport{background:var(--paper);min-height:640px;display:flex;flex-direction:column}
+
+  /* ---------- app chrome ---------- */
+  .statusbar{display:flex;justify-content:space-between;padding:14px 22px 6px;font-family:var(--mono);font-size:12px;font-weight:700;color:var(--ink)}
+  .web .statusbar{display:none}
+
+  .appbar{padding:8px 20px 14px;display:flex;align-items:center;gap:10px}
+  .web .appbar{padding:16px 30px;border-bottom:1px solid var(--line);background:var(--card)}
+  .appbar .logo{font-weight:900;font-size:17px}
+  .appbar .logo span{color:var(--gold)}
+  .appbar .me{margin-left:auto;display:flex;align-items:center;gap:9px}
+  .appbar .av{width:32px;height:32px;border-radius:50%;background:var(--indigo);color:#fff;display:grid;place-items:center;font-weight:700;font-size:13px}
+  .appbar .me .nm{font-size:12px;font-weight:700;line-height:1.15}
+  .appbar .me .sub{font-size:10.5px;color:var(--muted)}
+
+  /* top tabs (web only) */
+  .webtabs{display:none;gap:4px;padding:0 30px;background:var(--card);border-bottom:1px solid var(--line)}
+  .web .webtabs{display:flex}
+  .webtabs button{font-family:var(--jp);font-weight:700;font-size:13.5px;background:none;border:none;padding:14px 16px;color:var(--muted);cursor:pointer;border-bottom:2.5px solid transparent;display:flex;align-items:center;gap:7px}
+  .webtabs button.on{color:var(--indigo);border-color:var(--gold)}
+  .webtabs svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.9}
+
+  .body{flex:1;overflow:auto;padding:6px 20px 20px}
+  .web .body{padding:26px 30px 40px}
+
+  /* bottom tabs (phone only) */
+  .tabbar{display:flex;background:var(--card);border-top:1px solid var(--line);padding:8px 6px 14px}
+  .web .tabbar{display:none}
+  .tabbar button{flex:1;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--muted);font-family:var(--jp);font-size:10.5px;font-weight:700;padding:4px}
+  .tabbar svg{width:23px;height:23px;stroke:currentColor;fill:none;stroke-width:1.8}
+  .tabbar button.on{color:var(--indigo)}
+  .tabbar button.on svg{stroke:var(--indigo)}
+  .tabbar button.on::after{content:"";position:absolute}
+
+  /* ---------- shared bits ---------- */
+  h2.title{font-size:20px;font-weight:900;margin:8px 0 2px}
+  .eyebrow{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;color:var(--gold);font-weight:700;text-transform:uppercase;margin-bottom:3px}
+  .sub{color:var(--muted);font-size:12.5px;margin-bottom:16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .mono{font-family:var(--mono)}
+  .row{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid var(--line-2)}
+  .row:last-child{border:none}
+  .muted{color:var(--muted)}
+  .newbie{display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:900;color:#241B06;background:var(--gold);border-radius:4px;padding:1px 5px;margin-left:5px}
+  .badge{display:inline-flex;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px}
+  .b-emp{background:#E5E9F2;color:var(--indigo)} .b-arb{background:var(--gold-soft);color:#7A5A10} .b-part{background:#EAF0EA;color:#3B6E4C}
+  .st{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700}
+  .dot{width:8px;height:8px;border-radius:50%}
+  .st-in .dot{background:var(--green);box-shadow:0 0 0 3px var(--green-soft)} .st-in{color:var(--green)}
+  .st-br .dot{background:var(--gold)} .st-br{color:#9A6E12}
+  .st-plan .dot{border:2px solid var(--line)} .st-plan{color:var(--muted)}
+  .btn{font-family:var(--jp);font-weight:700;border-radius:11px;padding:15px;cursor:pointer;border:none;width:100%;font-size:15px;transition:.12s}
+  .btn.pri{background:var(--indigo);color:#fff} .btn.pri:hover{background:var(--indigo-deep)}
+  .btn.gold{background:var(--gold);color:#241B06}
+  .btn.ghost{background:var(--card);color:var(--ink);border:1.5px solid var(--line)}
+  .btn:focus-visible{outline:3px solid var(--gold-soft)}
+  .cols2{display:block}
+  .web .cols2{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
+
+  /* ---- home / punch ---- */
+  .statuscard{background:linear-gradient(135deg,var(--indigo),var(--indigo-deep));color:#fff;border:none}
+  .statuscard .lab{font-size:11px;color:#AAB4CC;letter-spacing:.1em}
+  .statuscard .big{font-family:var(--mono);font-size:34px;font-weight:700;margin:6px 0 2px}
+  .statuscard .rowd{display:flex;gap:18px;margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,.15)}
+  .statuscard .rowd div{font-size:11px;color:#AAB4CC} .statuscard .rowd b{display:block;font-family:var(--mono);font-size:15px;color:#fff;margin-top:2px}
+  .scanbtn{margin-top:16px;background:var(--gold);color:#241B06;border:none;border-radius:14px;padding:20px;width:100%;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:12px;font-weight:900;font-size:17px}
+  .scanbtn svg{width:26px;height:26px;stroke:#241B06;fill:none;stroke-width:2}
+
+  /* camera scan overlay */
+  .scanview{position:absolute;inset:0;background:#0B0F1A;z-index:20;display:flex;flex-direction:column;color:#fff}
+  .scanview .top{padding:20px 22px;display:flex;align-items:center;gap:12px}
+  .scanview .top button{background:rgba(255,255,255,.12);border:none;color:#fff;width:34px;height:34px;border-radius:50%;font-size:18px;cursor:pointer}
+  .scanview .top .t{font-weight:700}
+  .cam{flex:1;position:relative;display:grid;place-items:center;overflow:hidden;
+    background:radial-gradient(circle at 50% 40%,#243049,#0B0F1A 70%)}
+  .cam .feednoise{position:absolute;inset:0;opacity:.12;background-image:repeating-linear-gradient(0deg,#fff 0 1px,transparent 1px 3px)}
+  .frame{width:230px;height:230px;position:relative;display:grid;place-items:center}
+  .frame .brk{position:absolute;width:36px;height:36px;border:3px solid var(--gold)}
+  .frame .brk.tl{top:0;left:0;border-right:none;border-bottom:none;border-radius:8px 0 0 0}
+  .frame .brk.tr{top:0;right:0;border-left:none;border-bottom:none;border-radius:0 8px 0 0}
+  .frame .brk.bl{bottom:0;left:0;border-right:none;border-top:none;border-radius:0 0 0 8px}
+  .frame .brk.br{bottom:0;right:0;border-left:none;border-top:none;border-radius:0 0 8px 0}
+  .frame .miniqr{width:150px;height:150px;background:#fff;padding:9px;border-radius:8px;opacity:.96}
+  .frame .miniqr .qr{display:grid;grid-template-columns:repeat(21,1fr);grid-template-rows:repeat(21,1fr);width:100%;height:100%}
+  .frame .miniqr .qr i.f{background:#0B0F1A}
+  .scanline{position:absolute;left:8px;right:8px;height:3px;background:linear-gradient(90deg,transparent,var(--gold),transparent);top:8px;animation:scan 1.8s ease-in-out infinite;box-shadow:0 0 12px var(--gold)}
+  @keyframes scan{0%{top:8px}50%{top:218px}100%{top:8px}}
+  .scanview .hint{text-align:center;padding:20px 30px 8px;color:#C7CEDC;font-size:13px}
+  .scanview .detected{text-align:center;padding:0 30px;color:var(--gold);font-weight:700;font-size:13px;min-height:20px}
+  .scanview .act{padding:16px 22px 30px}
+
+  .okwrap{padding:4px 0}
+  .gps{display:flex;align-items:center;justify-content:center;gap:8px;font-size:12.5px;font-weight:700;padding:11px;border-radius:10px;margin:14px 0}
+  .gps.ok{background:var(--green-soft);color:var(--green)}
+  .punchset{display:grid;gap:10px}
+  .pbtn{padding:17px;border-radius:13px;border:none;font-family:var(--jp);font-weight:900;font-size:17px;cursor:pointer;color:#fff}
+  .pbtn.inb{background:var(--green)} .pbtn.outb{background:var(--indigo)}
+  .pbtn.brkb{background:var(--card);color:var(--ink);border:1.5px solid var(--line);font-size:15px;font-weight:700}
+  .privacy{text-align:center;font-size:11px;color:var(--muted);margin-top:14px}
+
+  /* ---- calendar ---- */
+  .seg{display:flex;background:#E4E2DB;border-radius:10px;padding:3px;margin-bottom:16px}
+  .seg button{flex:1;background:none;border:none;padding:9px;border-radius:8px;font-family:var(--jp);font-weight:700;font-size:13px;color:var(--muted);cursor:pointer}
+  .seg button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  .calhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+  .calhead .m{font-weight:900;font-size:16px}
+  .calhead button{background:var(--card);border:1px solid var(--line);width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:15px}
+  .dow{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:6px}
+  .dow div{text-align:center;font-size:10.5px;color:var(--muted);font-weight:700}
+  .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+  .day{aspect-ratio:1;border:1px solid var(--line-2);background:var(--card);border-radius:9px;padding:7px 6px;cursor:pointer;position:relative;display:flex;flex-direction:column;transition:.1s}
+  .day .n{font-family:var(--mono);font-size:12.5px;font-weight:700}
+  .day .tag{font-size:8.5px;font-weight:700;margin-top:auto}
+  .day.want{background:var(--green-soft);border-color:var(--green)} .day.want .tag{color:var(--green)}
+  .day.off{background:var(--red-soft);border-color:var(--red)} .day.off .tag{color:var(--red)}
+  .day.shift{border-color:var(--indigo)} .day.shift::after{content:"";position:absolute;bottom:6px;right:6px;width:6px;height:6px;border-radius:50%;background:var(--indigo)}
+  .day.blank{background:transparent;border:none;cursor:default}
+  .day:not(.blank):hover{border-color:#B7B2A6}
+
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--ink-2);margin-top:12px}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .sw{width:11px;height:11px;border-radius:3px}
+
+  .prefbox{margin-top:16px}
+  .prefbox .lab{font-weight:700;font-size:13px;margin-bottom:9px}
+  .chips{display:flex;flex-wrap:wrap;gap:7px}
+  .chip{font-size:12px;font-weight:600;padding:7px 13px;border-radius:20px;border:1px solid var(--line);background:var(--card);cursor:pointer}
+  .chip.on{background:var(--indigo);color:#fff;border-color:var(--indigo)}
+  .chip.custom{background:#EFF3F8;border-color:#CDD7EA;color:var(--indigo)}
+  .chip .x{margin-left:7px;font-weight:900;opacity:.55;cursor:pointer}
+  .timeadd{display:flex;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap}
+  .timeadd input[type=time]{font-family:var(--mono);font-size:13px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--card);color:var(--ink)}
+  .timeadd .tilde{color:var(--muted)}
+  .timeadd .addb{font-family:var(--jp);font-weight:700;font-size:12.5px;padding:8px 13px;border-radius:8px;border:1px solid var(--indigo);background:var(--card);color:var(--indigo);cursor:pointer}
+  .setnote{font-size:10.5px;color:var(--muted);margin:5px 0 0}
+  .day .n.sun{color:var(--red)} .day .n.sat{color:#2F5C8A}
+  .day .hol-l{font-size:7.5px;color:var(--red);font-weight:700;line-height:1.1;margin-top:1px}
+
+  .toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;padding:13px 22px;border-radius:11px;font-size:13px;font-weight:700;opacity:0;pointer-events:none;transition:.25s;z-index:60;box-shadow:0 16px 34px -12px rgba(0,0,0,.45)}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .toast .g{color:var(--gold)}
+
+  .foot{text-align:center;margin-top:26px;font-family:var(--mono);font-size:11px;color:#9B968A;letter-spacing:.03em}
+  @media (prefers-reduced-motion:reduce){.scanline{animation:none;top:113px}}
+  @media(max-width:460px){body{padding:16px 8px 50px}.phone{width:100%;max-width:392px}}
+</style>
+</head>
+<body>
+
+<div class="stage">
+  <div class="head">
+    <div class="noren"><i></i><i></i><i></i><i></i></div>
+    <h1>SHIN<span>勤怠</span> — スタッフアプリ</h1>
+    <p>QRで打刻・シフト確認・希望申請。1つの設計でスマホもWebも。</p>
+  </div>
+
+  <div class="toggle" id="toggle">
+    <button data-d="phone" class="on">📱 スマホ表示</button>
+    <button data-d="web">🖥 Web表示</button>
+  </div>
+
+  <div class="devwrap" id="devwrap"></div>
+
+  <div class="foot">MOCK v0 · レスポンシブ（同一コンポーネントを幅で出し分け）</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const IC = {
+  punch:'<circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/>',
+  cal:'<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/>',
+  req:'<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/><path d="M12 13v4M10 15h4"/>',
+  me:'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/>',
+  scan:'<path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2"/><rect x="7" y="8" width="10" height="8" rx="1"/>'
+};
+const svg=k=>`<svg viewBox="0 0 24 24">${IC[k]}</svg>`;
+
+let device='phone';
+let tab='home';          // home | shift | request | mypage
+let punchStage='home';   // home | scan | done
+let scanTimer=null;
+
+const TABS=[['home','打刻','punch'],['shift','シフト','cal'],['request','希望','req'],['mypage','マイページ','me']];
+
+/* ---------- QR grid ---------- */
+function qrHTML(){
+  let s='';const finder=(r,c)=>(r<7&&c<7)||(r<7&&c>13)||(r>13&&c<7);
+  for(let r=0;r<21;r++)for(let c=0;c<21;c++){
+    let on; if(finder(r,c)){const rr=r%14,cc=c%14;on=(rr===0||rr===6||cc===0||cc===6||(rr>=2&&rr<=4&&cc>=2&&cc<=4));}
+    else on=Math.random()>0.55;
+    s+=`<i class="${on?'f':''}"></i>`;
+  }
+  return `<div class="qr">${s}</div>`;
+}
+
+/* ---------- screens ---------- */
+function scr_home(){
+  if(punchStage==='scan') return scr_scan();
+  if(punchStage==='done') return scr_punch();
+  return `
+    <div class="eyebrow">神泉本店 · 7月9日(木)</div>
+    <h2 class="title">こんにちは、美咲さん</h2>
+    <div class="sub">出勤・退勤は店のQRをスキャンしてください。</div>
+    <div class="cols2">
+      <div>
+        <div class="card statuscard">
+          <div class="lab">現在の状態</div>
+          <div class="big">休憩中</div>
+          <div style="font-size:12px;color:#C7CEDC">14:30 から休憩・残り約 20 分</div>
+          <div class="rowd">
+            <div>出勤<b>11:00</b></div>
+            <div>予定退勤<b>22:00</b></div>
+            <div>今月<b>86.5h</b></div>
+          </div>
+        </div>
+        <button class="scanbtn" onclick="openScan()">${svg('scan')} スキャンして打刻</button>
+      </div>
+      <div>
+        <div class="card" style="margin-top:0">
+          <div style="font-weight:700;margin-bottom:6px">お知らせ</div>
+          <div class="row"><span>7/11(土)のシフトが確定</span><span class="muted mono">17:00–</span></div>
+          <div class="row"><span>来月の希望提出</span><span class="badge b-arb">〜7/20</span></div>
+          <div class="row"><span>6月分 給与明細</span><span class="mono">公開中</span></div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function scr_scan(){
+  return `<div class="scanview">
+    <div class="top"><button onclick="closeScan()">←</button><span class="t">QRをスキャン</span></div>
+    <div class="cam">
+      <div class="feednoise"></div>
+      <div class="frame">
+        <div class="brk tl"></div><div class="brk tr"></div><div class="brk bl"></div><div class="brk br"></div>
+        <div class="miniqr">${qrHTML()}</div>
+        <div class="scanline"></div>
+      </div>
+    </div>
+    <div class="hint">店頭タブレットのQRを枠に合わせてください</div>
+    <div class="detected" id="detected"></div>
+    <div class="act"><button class="btn gold" onclick="scanSuccess()">読み取り成功（デモ）</button></div>
+  </div>`;
+}
+
+function scr_punch(){
+  return `<div class="okwrap">
+    <div class="eyebrow">神泉本店 · 認証OK</div>
+    <h2 class="title">打刻</h2>
+    <div class="gps ok">📍 神泉本店の圏内（誤差 12m）· QRトークン有効</div>
+    <div class="card" style="text-align:center;padding:22px">
+      <div class="mono" style="font-size:40px;font-weight:700" id="pclock">--:--:--</div>
+      <div class="muted" style="font-size:12px">2026年7月9日（木）</div>
+    </div>
+    <div class="punchset" style="margin-top:16px">
+      <button class="pbtn inb" onclick="done('<span class=g>✓</span> 出勤を記録しました')">出勤</button>
+      <button class="pbtn brkb" onclick="done('休憩を記録しました')">休憩 開始 / 終了</button>
+      <button class="pbtn outb" onclick="done('<span class=g>✓</span> 退勤を記録しました')">退勤</button>
+    </div>
+    <div class="privacy">位置情報は打刻の瞬間のみ取得し、常時追跡はしません。<br>圏外・取得できない場合も打刻は通り「位置未確認」として記録されます。</div>
+    <button class="btn ghost" style="margin-top:14px" onclick="resetPunch()">戻る</button>
+  </div>`;
+}
+
+function scr_shift(){
+  return `
+    <div class="eyebrow">神泉本店</div>
+    <h2 class="title">シフト</h2>
+    <div class="sub">今日いっしょに入るメンバーと、自分の予定。時給・給与は表示されません。</div>
+    <div class="seg" id="shiftSeg">
+      <button class="on" onclick="segShift(this,'today')">今日</button>
+      <button onclick="segShift(this,'me')">自分の予定</button>
+    </div>
+    <div id="shiftBody">${shiftToday()}</div>`;
+}
+function shiftToday(){
+  return `<div class="card">
+    <div class="row"><span><b>鈴木 大輔</b> <span class="badge b-emp" style="margin-left:4px">社員</span></span><span class="st st-in"><span class="dot"></span>出勤中</span></div>
+    <div class="row"><span><b>田中 誠</b> <span class="badge b-emp" style="margin-left:4px">社員</span></span><span class="mono muted">キッチン</span></div>
+    <div class="row"><span><b>美咲さん</b>（あなた）</span><span class="st st-br"><span class="dot"></span>休憩中</span></div>
+    <div class="row"><span><b>山本 蓮</b><span class="newbie">新</span></span><span class="st st-plan"><span class="dot"></span>17:00 予定</span></div>
+  </div>
+  <div class="legend"><span><span class="sw" style="background:var(--indigo)"></span>社員</span><span><span class="newbie" style="margin:0">新</span> 新人</span></div>`;
+}
+function shiftMe(){
+  return `<div class="card">
+    <div class="row"><span><b>7/9(木)</b> フロア</span><span class="mono">11:00–22:00</span></div>
+    <div class="row"><span><b>7/11(土)</b> フロア <span class="badge b-arb" style="margin-left:4px">確定</span></span><span class="mono">17:00–23:00</span></div>
+    <div class="row"><span><b>7/12(日)</b> フロア <span class="badge b-arb" style="margin-left:4px">確定</span></span><span class="mono">17:00–23:00</span></div>
+    <div class="row"><span><b>7/19(土)</b> フロア</span><span class="muted mono">調整中</span></div>
+  </div>
+  ${miniCal('shift')}`;
+}
+
+function scr_request(){
+  return `
+    <div class="eyebrow">2026年 7月 · 希望提出（〜7/20）</div>
+    <h2 class="title">希望申請</h2>
+    <div class="sub">働きたい日をタップ。長押しで「休み希望(×)」。集約後、店長が必要人員に合わせて確定します。</div>
+    <div class="cols2">
+      <div>${miniCal('request')}
+        <div class="legend"><span><span class="sw" style="background:var(--green-soft);border:1px solid var(--green)"></span>働きたい</span><span><span class="sw" style="background:var(--red-soft);border:1px solid var(--red)"></span>休み希望</span></div>
+      </div>
+      <div>
+        <div class="prefbox card">
+          <div class="lab">時間帯の希望（任意）</div>
+          <div class="chips" id="chips">
+            <span class="chip" onclick="this.classList.toggle('on')">昼 11–17</span>
+            <span class="chip on" onclick="this.classList.toggle('on')">夜 17–23</span>
+            <span class="chip" onclick="this.classList.toggle('on')">終日OK</span>
+          </div>
+          <p class="setnote">※ 昼・夜の時間は<b>店舗設定</b>（店長が変更可）。ここには店の設定値が表示されます。</p>
+          <div class="timeadd">
+            <input type="time" id="tFrom" value="18:00">
+            <span class="tilde">〜</span>
+            <input type="time" id="tTo" value="22:00">
+            <button class="addb" onclick="addBand()">＋ 自分で指定</button>
+          </div>
+          <div class="lab" style="margin-top:16px">今月の希望</div>
+          <div class="row"><span>働きたい</span><span class="mono" style="color:var(--green)">5 日</span></div>
+          <div class="row"><span>休み希望</span><span class="mono" style="color:var(--red)">2 日</span></div>
+          <div class="row"><span>目安の合計</span><span class="mono">約 32 h</span></div>
+        </div>
+        <button class="btn pri" style="margin-top:14px" onclick="toast('<span class=g>✓</span> 希望を提出しました（mock）')">希望を提出</button>
+      </div>
+    </div>`;
+}
+
+function scr_mypage(){
+  return `
+    <div class="eyebrow">マイページ</div>
+    <h2 class="title">佐藤 美咲</h2>
+    <div class="sub">神泉本店 · アルバイト</div>
+    <div class="cols2">
+      <div>
+        <div class="card">
+          <div style="font-weight:700;margin-bottom:6px">今月（7月）</div>
+          <div class="row"><span>実働時間</span><span class="mono">86.5 h</span></div>
+          <div class="row"><span>次回シフト</span><span class="mono">7/11(土) 17:00</span></div>
+          <div class="row"><span>提出中の希望</span><span class="mono">6 日</span></div>
+        </div>
+      </div>
+      <div>
+        <div class="card">
+          <div class="row" style="cursor:pointer" onclick="toast('6月分 明細PDF（mock）')"><span>💴 6月分 給与明細</span><span class="muted">›</span></div>
+          <div class="row" style="cursor:pointer" onclick="toast('通知設定（mock）')"><span>🔔 通知設定</span><span class="muted">›</span></div>
+          <div class="row" style="cursor:pointer" onclick="toast('言語：日本語 / English')"><span>🌐 言語（JA / EN）</span><span class="muted">›</span></div>
+          <div class="row" style="cursor:pointer" onclick="toast('ログアウト（mock）')"><span>ログアウト</span><span class="muted">›</span></div>
+        </div>
+      </div>
+    </div>`;
+}
+
+/* ---------- calendar builder (JP holidays) ---------- */
+// July 2026: starts Wed (Monday-start grid -> 2 blanks). Holiday: 7/20 海の日 (3rd Mon).
+const HOLIDAYS = {20:'海の日'};
+function miniCal(mode){
+  const want=[11,18,20,24,25], off=[8,14], shift=[9,20,24,25];
+  let cells='';
+  for(let b=0;b<2;b++) cells+='<div class="day blank"></div>';   // Wed start
+  for(let d=1;d<=31;d++){
+    const dow=(d+1)%7;                       // 0=Mon .. 5=Sat, 6=Sun
+    const isHol=!!HOLIDAYS[d];
+    const nc = (isHol||dow===6)?'sun':dow===5?'sat':'';
+    let cls='day', tag='';
+    if(mode==='request'){
+      if(want.includes(d)){cls+=' want';tag='<div class="tag">働きたい</div>'}
+      else if(off.includes(d)){cls+=' off';tag='<div class="tag">×</div>'}
+    }else if(shift.includes(d)){cls+=' shift'}
+    const hl = isHol?`<div class="hol-l">祝 ${HOLIDAYS[d]}</div>`:'';
+    const click = mode==='request' ? `onclick="toggleDay(this)"` : '';
+    cells+=`<div class="${cls}" ${click}><div class="n ${nc}">${d}</div>${hl}${tag}</div>`;
+  }
+  return `<div class="card">
+    <div class="calhead"><button>‹</button><div class="m">2026年 7月</div><button>›</button></div>
+    <div class="dow"><div>月</div><div>火</div><div>水</div><div>木</div><div>金</div><div style="color:#2F5C8A">土</div><div style="color:var(--red)">日</div></div>
+    <div class="cal">${cells}</div>
+  </div>`;
+}
+function addBand(){
+  const f=document.getElementById('tFrom').value, t=document.getElementById('tTo').value;
+  if(!f||!t)return;
+  const chips=document.getElementById('chips');
+  const c=document.createElement('span');
+  c.className='chip custom on';
+  c.innerHTML=`${f}–${t}<span class="x" onclick="this.parentNode.remove()">×</span>`;
+  chips.appendChild(c);
+  toast('<span class="g">✓</span> 希望時間を追加しました');
+}
+function toggleDay(el){
+  if(el.classList.contains('want')){el.classList.remove('want');el.classList.add('off');el.querySelector('.tag')?.remove();const t=document.createElement('div');t.className='tag';t.textContent='×';el.appendChild(t);}
+  else if(el.classList.contains('off')){el.classList.remove('off');el.querySelector('.tag')?.remove();}
+  else{el.classList.add('want');const t=document.createElement('div');t.className='tag';t.textContent='働きたい';el.appendChild(t);}
+}
+
+/* ---------- interactions ---------- */
+const SCREENS={home:scr_home,shift:scr_shift,request:scr_request,mypage:scr_mypage};
+function openScan(){punchStage='scan';render();
+  clearTimeout(scanTimer);
+  scanTimer=setTimeout(()=>{const d=document.getElementById('detected');if(d)d.innerHTML='SHIN 勤怠 · 神泉本店 を検出 ✓';},1300);
+}
+function closeScan(){clearTimeout(scanTimer);punchStage='home';render()}
+function scanSuccess(){clearTimeout(scanTimer);punchStage='done';render()}
+function resetPunch(){punchStage='home';render()}
+function done(msg){toast(msg);punchStage='home';render()}
+function segShift(btn,which){document.querySelectorAll('#shiftSeg button').forEach(b=>b.classList.remove('on'));btn.classList.add('on');document.getElementById('shiftBody').innerHTML=which==='today'?shiftToday():shiftMe();}
+
+function toast(html){const t=document.getElementById('toast');t.innerHTML=html;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2200)}
+
+/* ---------- frame render ---------- */
+function render(){
+  const wrap=document.getElementById('devwrap');
+  const body = SCREENS[tab]();
+  const bottomTabs = TABS.map(([k,l,ic])=>`<button class="${tab===k?'on':''}" onclick="setTab('${k}')" style="position:relative">${svg(ic)}<span>${l}</span></button>`).join('');
+  const topTabs = TABS.map(([k,l,ic])=>`<button class="${tab===k?'on':''}" onclick="setTab('${k}')">${svg(ic)}<span>${l}</span></button>`).join('');
+
+  const appHTML = `
+    <div class="statusbar"><span>9:41</span><span>神泉本店 · JST</span><span>●●● 100%</span></div>
+    <div class="appbar">
+      <div class="logo">SHIN<span>勤怠</span></div>
+      <div class="me"><div style="text-align:right"><div class="nm">佐藤 美咲</div><div class="sub" style="margin:0">アルバイト</div></div><div class="av">佐</div></div>
+    </div>
+    <div class="webtabs">${topTabs}</div>
+    <div class="body">${body}</div>
+    <div class="tabbar">${bottomTabs}</div>`;
+
+  if(device==='phone'){
+    wrap.innerHTML=`<div class="phone"><div class="viewport">${appHTML}</div></div>`;
+  }else{
+    wrap.innerHTML=`<div class="web"><div class="chrome"><div class="dots"><i></i><i></i><i></i></div><div class="url">studydesk… → shin-kintai.worldwave.workers.dev</div></div><div class="viewport">${appHTML}</div></div>`;
+  }
+  if(tab==='home'&&punchStage==='done') startPClock();
+}
+function setTab(k){tab=k;if(k!=='home')punchStage='home';render()}
+function startPClock(){const el=document.getElementById('pclock');if(!el)return;const f=()=>{if(!document.getElementById('pclock'))return;const d=new Date();document.getElementById('pclock').textContent=[d.getHours(),d.getMinutes(),d.getSeconds()].map(n=>String(n).padStart(2,'0')).join(':');requestAnimationFrame(()=>setTimeout(f,900))};f();}
+
+document.querySelectorAll('#toggle button').forEach(b=>b.onclick=()=>{
+  device=b.dataset.d;
+  document.querySelectorAll('#toggle button').forEach(x=>x.classList.toggle('on',x===b));
+  render();
+});
+render();
+</script>
+</body>
+</html>
