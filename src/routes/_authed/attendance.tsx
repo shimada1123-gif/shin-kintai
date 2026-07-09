@@ -281,6 +281,46 @@ function CorrectionHistory({
 
 /* ------------------------------ 1. 日別×スタッフ ------------------------------ */
 
+function DlIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 3v12" />
+      <path d="m7 11 5 5 5-5" />
+      <path d="M4 21h16" />
+    </svg>
+  )
+}
+
+/** クイック選択: 今日 / 今週(月〜日) / 今月 / 先月 の開始・終了 */
+function quickRange(kind: 'today' | 'week' | 'month' | 'lastMonth'): { from: string; to: string } {
+  const now = new Date()
+  if (kind === 'today') return { from: ymd(now), to: '' }
+  if (kind === 'week') {
+    const dow = (now.getDay() + 6) % 7 // 月曜=0
+    const mon = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dow)
+    const sun = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + 6)
+    return { from: ymd(mon), to: ymd(sun) }
+  }
+  if (kind === 'month') {
+    return {
+      from: ymd(new Date(now.getFullYear(), now.getMonth(), 1)),
+      to: ymd(new Date(now.getFullYear(), now.getMonth() + 1, 0)),
+    }
+  }
+  return {
+    from: ymd(new Date(now.getFullYear(), now.getMonth() - 1, 1)),
+    to: ymd(new Date(now.getFullYear(), now.getMonth(), 0)),
+  }
+}
+
 function DayView({ canEdit }: { canEdit: boolean }) {
   const { me } = useMe()
   const [day, setDay] = useState(ymd(new Date()))
@@ -317,6 +357,7 @@ function DayView({ canEdit }: { canEdit: boolean }) {
       const name =
         to === day ? `勤怠明細_${storeName}_${day}.csv` : `勤怠明細_${storeName}_${day}_${to}.csv`
       downloadCsv(name, detailCsvRows(rows))
+      setExportMsg('ダウンロードしました ✓')
     } catch (e) {
       setExportMsg(errText(e, 'エクスポートに失敗しました'))
     } finally {
@@ -324,24 +365,80 @@ function DayView({ canEdit }: { canEdit: boolean }) {
     }
   }
 
+  const applyQuick = (kind: 'today' | 'week' | 'month' | 'lastMonth') => {
+    const r = quickRange(kind)
+    setDay(r.from)
+    setRangeTo(r.to)
+    setExportMsg(null)
+  }
+
   return (
     <>
-      <div className="filter-row">
-        <label className="field">
-          <span>日付</span>
-          <input type="date" value={day} onChange={(e) => setDay(e.target.value)} />
-        </label>
-        <label className="field">
-          <span>店舗</span>
-          <select value={storeId} onChange={(e) => setStoreId(e.target.value)}>
-            <option value="">すべて</option>
-            {me.stores.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </label>
+      <div className="card export-bar">
+        <div className="export-fields">
+          <label className="field">
+            <span>抽出期間（開始日）</span>
+            <input
+              type="date"
+              value={day}
+              onChange={(e) => {
+                setDay(e.target.value)
+                setExportMsg(null)
+              }}
+            />
+          </label>
+          <span className="range-tilde">〜</span>
+          <label className="field">
+            <span>終了日（空 = 単日）</span>
+            <input
+              type="date"
+              value={rangeTo}
+              min={day}
+              onChange={(e) => {
+                setRangeTo(e.target.value)
+                setExportMsg(null)
+              }}
+            />
+          </label>
+          <label className="field">
+            <span>店舗</span>
+            <select value={storeId} onChange={(e) => setStoreId(e.target.value)}>
+              <option value="">すべて</option>
+              {me.stores.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="export-quick">
+          <button className="tab" onClick={() => applyQuick('today')}>
+            今日
+          </button>
+          <button className="tab" onClick={() => applyQuick('week')}>
+            今週
+          </button>
+          <button className="tab" onClick={() => applyQuick('month')}>
+            今月
+          </button>
+          <button className="tab" onClick={() => applyQuick('lastMonth')}>
+            先月
+          </button>
+        </div>
+
+        <div className="export-actions">
+          <button className="btn-dl" disabled={exporting} onClick={() => void exportDetail()}>
+            <DlIcon />
+            {exporting ? '生成中…' : 'CSVをダウンロード（明細）'}
+          </button>
+          {exportMsg && <span className="note export-msg">{exportMsg}</span>}
+        </div>
+
+        <p className="note">
+          終了日が空の場合は開始日の1日分を出力します。下の一覧には開始日の打刻を表示しています。
+        </p>
       </div>
 
       {q.isPending && <p className="note">読み込み中…</p>}
@@ -359,17 +456,6 @@ function DayView({ canEdit }: { canEdit: boolean }) {
           historyMode={canEdit ? 'admin' : undefined}
         />
       )}
-
-      <div className="export-row">
-        <label className="field">
-          <span>終了日（期間で出す場合）</span>
-          <input type="date" value={rangeTo} min={day} onChange={(e) => setRangeTo(e.target.value)} />
-        </label>
-        <button className="btn sm" disabled={exporting} onClick={() => void exportDetail()}>
-          {exporting ? '生成中…' : 'CSVエクスポート（明細）'}
-        </button>
-        {exportMsg && <span className="note">{exportMsg}</span>}
-      </div>
 
       {editing && (
         <EditModal
@@ -441,6 +527,7 @@ function StaffView({ canEdit, lockToSelf }: { canEdit: boolean; lockToSelf: bool
         ? '全スタッフ'
         : ((staffQ.data ?? []).find((s) => s.id === staffId)?.full_name ?? 'スタッフ')
       downloadCsv(`勤怠集計_${who}_${range.from}_${range.to}.csv`, csv)
+      setExportMsg('ダウンロードしました ✓')
     } catch (e) {
       setExportMsg(errText(e, 'エクスポートに失敗しました'))
     } finally {
@@ -526,16 +613,22 @@ function StaffView({ canEdit, lockToSelf }: { canEdit: boolean; lockToSelf: bool
             historyMode={lockToSelf ? 'self' : canEdit ? 'admin' : undefined}
           />
 
-          <div className="export-row">
-            <button className="btn sm" disabled={exporting} onClick={() => void exportSummary(false)}>
-              {exporting ? '生成中…' : 'CSVエクスポート（集計）'}
+          <div className="export-actions summary-export">
+            <button className="btn-dl" disabled={exporting} onClick={() => void exportSummary(false)}>
+              <DlIcon />
+              {exporting ? '生成中…' : 'CSVをダウンロード（集計）'}
             </button>
             {!lockToSelf && (
-              <button className="btn sm" disabled={exporting} onClick={() => void exportSummary(true)}>
+              <button
+                className="btn-dl secondary"
+                disabled={exporting}
+                onClick={() => void exportSummary(true)}
+              >
+                <DlIcon />
                 全スタッフ一括（集計）
               </button>
             )}
-            {exportMsg && <span className="note">{exportMsg}</span>}
+            {exportMsg && <span className="note export-msg">{exportMsg}</span>}
           </div>
         </>
       )}

@@ -1855,17 +1855,119 @@ input[type='datetime-local'] {
   width: 100%;
 }
 
-/* CSVエクスポート行 */
-.export-row {
+/* CSVエクスポートバー */
+.export-bar {
+  padding: 16px 18px 14px;
+  margin-bottom: 16px;
   display: flex;
-  gap: 10px;
-  align-items: flex-end;
-  flex-wrap: wrap;
-  margin-top: 12px;
+  flex-direction: column;
+  gap: 12px;
+  border-left: 3px solid var(--gold);
 }
 
-.export-row .field {
-  min-width: 170px;
+.export-bar > .note {
+  margin: 0;
+}
+
+.export-fields {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.export-fields .field {
+  min-width: 160px;
+}
+
+.range-tilde {
+  font-weight: 900;
+  color: var(--muted);
+  padding-bottom: 11px;
+}
+
+.export-quick {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.export-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.summary-export {
+  margin-top: 14px;
+}
+
+/* 大きなダウンロードボタン（藍×白、アイコン付き） */
+.btn-dl {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--jp);
+  font-size: 14.5px;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  padding: 13px 24px;
+  border-radius: 9px;
+  border: 1px solid var(--indigo);
+  background: var(--indigo);
+  color: #fff;
+  cursor: pointer;
+  transition: 0.12s;
+}
+
+.btn-dl:hover:not(:disabled) {
+  background: var(--indigo-deep);
+}
+
+.btn-dl:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+.btn-dl:focus-visible {
+  outline: 3px solid var(--gold-soft);
+  outline-offset: 1px;
+}
+
+.btn-dl svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
+}
+
+.btn-dl.secondary {
+  background: var(--card);
+  color: var(--indigo);
+}
+
+.btn-dl.secondary:hover:not(:disabled) {
+  background: var(--ai-soft, #e8edf5);
+}
+
+.export-msg {
+  font-weight: 700;
+}
+
+@media (max-width: 560px) {
+  .export-fields {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .range-tilde {
+    display: none;
+  }
+
+  .btn-dl {
+    width: 100%;
+    justify-content: center;
+  }
 }
 
 /* 補正履歴（行の展開） */
