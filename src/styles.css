@@ -440,6 +440,9 @@ body {
   font-weight: 900;
   margin: 0;
   letter-spacing: 0.01em;
+  /* 日本語見出しを1文字ずつ折り返さない（語中改行の禁止） */
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 .page-h .desc {
@@ -2082,6 +2085,53 @@ input[type='datetime-local'] {
   min-width: 180px;
 }
 
+/* ---------- 据置URL（設定画面・常時表示） ---------- */
+.url-block {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  max-width: 460px;
+}
+
+.url-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.url-actions .btn {
+  white-space: nowrap; /* 「URL/を/発/行」のような縦割れを防ぐ */
+}
+
+.url-note {
+  margin-top: 12px;
+}
+
+.qr-print-cell {
+  background: #faf9f6;
+}
+
+.store-urlqr {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 12px 6px;
+}
+
+.store-urlqr canvas {
+  background: #fff;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  flex: none;
+}
+
+.store-urlqr .note {
+  flex: 1;
+  min-width: 200px;
+}
+
 /* ---------- 今日のあなた（/punch）: 打刻ごとのカード区切り ---------- */
 .today-card {
   border: 1px solid var(--line-2);
@@ -2107,6 +2157,18 @@ input[type='datetime-local'] {
 /* 段落の読みやすさ（全体） */
 .note {
   line-height: 1.75;
+  overflow-wrap: break-word;
+}
+
+/* 見出し類は語中で改行しない（スタ/ッフ のような折返し防止） */
+h1,
+h2,
+h3,
+.card-title,
+.mh,
+.dashboard h1,
+.placeholder h1 {
+  word-break: keep-all;
   overflow-wrap: break-word;
 }
 
@@ -2243,6 +2305,40 @@ input[type='datetime-local'] {
 
   .mcard-wide {
     padding: 16px;
+  }
+
+  /* 大見出し: 説明文を下に折り、見出し自体は自然な改行のみ */
+  .page-h {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+
+  .page-h h1 {
+    font-size: 20px;
+  }
+
+  .page-h .desc {
+    flex: 1 1 100%;
+    padding-bottom: 0;
+  }
+
+  /* カード内の縦位置: baseline だとチップとラベル付きセルがずれるので上端で揃える */
+  .m-cards tr {
+    align-items: flex-start;
+  }
+
+  .m-cards td[data-label] {
+    line-height: 1.5;
+  }
+
+  .m-cards .cell-chip .badge {
+    margin: 0 4px 0 0;
+  }
+
+  /* /staff のスタッフ一覧: 区分タグ→所属店舗→給与/交通費 を縦の
+     「ラベル→値」階層に揃える（タグ行を全幅にして横並びのずれを解消） */
+  .col-main .m-cards td.cell-chip {
+    flex: 1 1 100%;
   }
 }
 

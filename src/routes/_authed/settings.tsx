@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import QRCode from 'qrcode'
 import { errText } from '@/lib/errors'
 import { useMe } from '@/lib/me-context'
 import { usePermissions } from '@/lib/perm'
@@ -61,12 +62,12 @@ function SettingsPage() {
       {storesQ.isPending && <p className="note">読み込み中…</p>}
       {storesQ.data && (
         <div className="card table-wrap">
-          <table>
+          <table className="m-cards">
             <thead>
               <tr>
                 <th>店舗</th>
                 <th>GPSポリシー</th>
-                <th>据置QR</th>
+                <th>据置URL（固定）</th>
               </tr>
             </thead>
             <tbody>
@@ -76,6 +77,15 @@ function SettingsPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {me.role !== 'staff' && (
+        <p className="note url-note">
+          据置URLは店舗ごとに<b>固定</b>です。タブレットにブックマーク／ホーム画面追加して
+          常設してください。URLが漏れても、実際の打刻にはスタッフ本人のログインと
+          その場で発行されるワンタイムQRが必要なため、第三者は打刻できません。
+          ※QR_DISPLAY_SECRET を更新した場合のみURLは無効になり、再配布が必要です。
+        </p>
       )}
 
       {testMode && <DemoCard />}
@@ -204,8 +214,8 @@ function StoreRow({
 }) {
   const qc = useQueryClient()
   const [error, setError] = useState<string | null>(null)
-  const [url, setUrl] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [showQr, setShowQr] = useState(false)
 
   const save = useMutation({
     mutationFn: (policy: 'off' | 'flag' | 'block') =>
@@ -214,19 +224,33 @@ function StoreRow({
     onError: (e) => setError(errText(e, 'GPSポリシーを更新できませんでした')),
   })
 
-  const issue = useMutation({
-    mutationFn: () => issueDisplayUrl({ data: { store_id: store.id } }),
-    onSuccess: (r) => setUrl(`${window.location.origin}${r.path}`),
-    onError: (e) => setError(errText(e, 'URLを発行できませんでした')),
+  // sig は store_id の固定 HMAC（決定的）なので、URL は毎回同じ。
+  // ページを開くたびに取得して常時表示する（署名はサーバー側でのみ計算）。
+  const urlQ = useQuery({
+    queryKey: ['display_url', store.id],
+    enabled: canIssue,
+    staleTime: Infinity,
+    queryFn: async () => {
+      const r = await issueDisplayUrl({ data: { store_id: store.id } })
+      return `${window.location.origin}${r.path}`
+    },
   })
+  const url = urlQ.data ?? null
+
+  const copy = () => {
+    if (!url) return
+    void navigator.clipboard.writeText(url)
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 2500)
+  }
 
   return (
     <>
       <tr>
-        <td>
+        <td className="cell-main">
           <b>{store.name}</b>
         </td>
-        <td>
+        <td className="cell-wide" data-label="GPSポリシー">
           {canEdit ? (
             <select
               value={store.gps_policy}
@@ -246,43 +270,70 @@ function StoreRow({
             <span className="note">{POLICY_LABEL[store.gps_policy]}</span>
           )}
         </td>
-        <td>
-          {canIssue && (
-            <button className="btn sm" onClick={() => issue.mutate()} disabled={issue.isPending}>
-              {issue.isPending ? '発行中…' : 'URLを発行'}
-            </button>
+        <td className="cell-wide" data-label="据置URL（固定）">
+          {!canIssue ? (
+            <span className="note">—</span>
+          ) : urlQ.isPending ? (
+            <span className="note">URLを取得中…</span>
+          ) : urlQ.error ? (
+            <span className="note">{errText(urlQ.error, 'URLを取得できませんでした')}</span>
+          ) : (
+            <div className="url-block">
+              <code className="mono display-url">{url}</code>
+              <div className="url-actions">
+                <button className="btn sm" onClick={copy}>
+                  {copied ? '✓ コピーしました' : 'URLをコピー'}
+                </button>
+                <button className="btn sm" onClick={() => setShowQr((v) => !v)}>
+                  {showQr ? 'QRを隠す' : 'QRを表示'}
+                </button>
+              </div>
+            </div>
           )}
         </td>
       </tr>
-      {(url || error) && (
+      {showQr && url && (
+        <tr>
+          <td colSpan={3} className="qr-print-cell">
+            <StoreUrlQr url={url} name={store.name} />
+          </td>
+        </tr>
+      )}
+      {error && (
         <tr>
           <td colSpan={3}>
-            {error && (
-              <p className="login-error" role="alert">
-                {error}
-              </p>
-            )}
-            {url && (
-              <div className="issued-inline">
-                <code className="mono display-url">{url}</code>
-                <button
-                  className="btn sm"
-                  onClick={() => {
-                    void navigator.clipboard.writeText(url)
-                    setCopied(true)
-                  }}
-                >
-                  {copied ? 'コピーしました' : 'コピー'}
-                </button>
-                <button className="btn sm" onClick={() => setUrl(null)}>
-                  閉じる
-                </button>
-              </div>
-            )}
+            <p className="login-error" role="alert">
+              {error}
+            </p>
           </td>
         </tr>
       )}
     </>
+  )
+}
+
+/** 店舗の据置ページ（固定URL）をQR化して表示。印刷して店頭に貼れる。 */
+function StoreUrlQr({ url, name }: { url: string; name: string }) {
+  const ref = useRef<HTMLCanvasElement>(null)
+
+  useEffect(() => {
+    if (ref.current) {
+      void QRCode.toCanvas(ref.current, url, {
+        width: 180,
+        margin: 1,
+        color: { dark: '#1A2233', light: '#FFFFFF' },
+      })
+    }
+  }, [url])
+
+  return (
+    <div className="store-urlqr">
+      <canvas ref={ref} width={180} height={180} />
+      <div className="note">
+        {name} の据置ページ（URLは固定）。印刷して店頭に貼る、またはタブレットで
+        このQRを読み取ってブックマークしてください。
+      </div>
+    </div>
   )
 }
 
