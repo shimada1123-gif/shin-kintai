@@ -62,45 +62,62 @@ export const issueDisplayUrl = createServerFn({ method: 'POST' })
   })
 
 /* ------------------------------------------------------------------ */
-/* 2. 据置ページからのトークン発行（ログイン不要・署名で認可）            */
+/* 2. 据置ページからのワンタイムQR発行（ログイン不要・署名で認可）        */
 /* ------------------------------------------------------------------ */
 
-export const issueStoreToken = createServerFn({ method: 'POST' })
-  .inputValidator((d: { store_id: string; sig: string }) => {
+const PUNCH_KINDS: PunchKind[] = ['clock_in', 'break_start', 'break_end', 'clock_out']
+
+/**
+ * モデルB: 店舗端末が種別ボタンを押すたびに1枚だけ発行する。
+ * kind はここで確定してトークン側に持たせる（クライアント送信の kind は以後信用しない）。
+ */
+export const issuePunchToken = createServerFn({ method: 'POST' })
+  .inputValidator((d: { store_id: string; kind: PunchKind; sig: string }) => {
     assert(d.store_id && d.sig, 'パラメータが不足しています。')
+    assert(PUNCH_KINDS.includes(d.kind), '不正な打刻種別です。')
     return d
   })
-  .handler(async ({ data }): Promise<{ token: string; expires_at: string; store_name: string }> => {
-    // ログイン不要。認可は HMAC 署名のみ（定数時間比較）。
-    const valid = await verifyStoreSig(data.store_id, data.sig)
-    assert(valid, 'この表示URLは無効です。管理画面から発行し直してください。')
+  .handler(
+    async ({
+      data,
+    }): Promise<{ token: string; expires_at: string; store_name: string; kind: PunchKind }> => {
+      // ログイン不要。認可は HMAC 署名のみ（定数時間比較）。
+      const valid = await verifyStoreSig(data.store_id, data.sig)
+      assert(valid, 'この表示URLは無効です。管理画面から発行し直してください。')
 
-    const admin = getAdminClient()
+      const admin = getAdminClient()
 
-    const { data: store } = await admin
-      .from('stores')
-      .select('id, name')
-      .eq('id', data.store_id)
-      .maybeSingle()
-    assert(store, '店舗が見つかりません。')
+      const { data: store } = await admin
+        .from('stores')
+        .select('id, name')
+        .eq('id', data.store_id)
+        .maybeSingle()
+      assert(store, '店舗が見つかりません。')
 
-    // 期限切れトークンの掃除（この店舗ぶんのみ）
-    await admin
-      .from('qr_tokens')
-      .delete()
-      .eq('store_id', data.store_id)
-      .lt('expires_at', new Date().toISOString())
+      // 掃除：期限切れ・使用済みのトークン（この店舗ぶんのみ）
+      const nowIso = new Date().toISOString()
+      await admin.from('qr_tokens').delete().eq('store_id', data.store_id).lt('expires_at', nowIso)
+      await admin
+        .from('qr_tokens')
+        .delete()
+        .eq('store_id', data.store_id)
+        .not('used_at', 'is', null)
 
-    const token = generateToken()
-    const expiresAt = new Date(Date.now() + TOKEN_TTL_SEC * 1000).toISOString()
+      const token = generateToken()
+      const expiresAt = new Date(Date.now() + TOKEN_TTL_SEC * 1000).toISOString()
 
-    const { error } = await admin
-      .from('qr_tokens')
-      .insert({ store_id: data.store_id, token, expires_at: expiresAt })
-    assert(!error, 'トークンを発行できませんでした。')
+      const { error } = await admin.from('qr_tokens').insert({
+        store_id: data.store_id,
+        token,
+        kind: data.kind,
+        expires_at: expiresAt,
+        used_at: null,
+      })
+      assert(!error, 'トークンを発行できませんでした。')
 
-    return { token, expires_at: expiresAt, store_name: store.name }
-  })
+      return { token, expires_at: expiresAt, store_name: store.name, kind: data.kind }
+    },
+  )
 
 /* ------------------------------------------------------------------ */
 /* 3. 打刻                                                             */
@@ -108,7 +125,7 @@ export const issueStoreToken = createServerFn({ method: 'POST' })
 
 export interface PunchInput {
   token: string
-  kind: PunchKind
+  // kind はクライアントから受けない。トークンに紐づく kind（issuePunchToken で確定）のみを信用する。
   gps_lat?: number | null
   gps_lng?: number | null
 }
@@ -121,13 +138,12 @@ export interface PunchResult {
   message: string
 }
 
+const USED_OR_EXPIRED_MSG =
+  'このQRは使用済みか期限切れです。店舗端末で新しいQRを出してください。'
+
 export const punch = createServerFn({ method: 'POST' })
   .inputValidator((d: PunchInput) => {
     assert(d.token, 'QRコードを読み取ってください。')
-    assert(
-      ['clock_in', 'clock_out', 'break_start', 'break_end'].includes(d.kind),
-      '不正な打刻種別です。',
-    )
     return d
   })
   .handler(async ({ data }): Promise<PunchResult> => {
@@ -135,17 +151,20 @@ export const punch = createServerFn({ method: 'POST' })
     const caller = await requireCaller()
     const admin = getAdminClient()
 
-    // (b) トークン照合：存在・未失効
+    // (b) トークン照合：存在・未使用・未失効。kind はここ（=トークン由来）で確定する
     const { data: qr } = await admin
       .from('qr_tokens')
-      .select('id, store_id, expires_at')
+      .select('id, store_id, kind, expires_at, used_at')
       .eq('token', data.token)
       .maybeSingle()
-    assert(qr, 'QRコードが無効です。店舗の画面を読み取り直してください。')
+    assert(qr, 'QRコードが無効です。店舗端末で新しいQRを出してください。')
+    assert(!qr.used_at, USED_OR_EXPIRED_MSG)
+    assert(new Date(qr.expires_at).getTime() > Date.now(), USED_OR_EXPIRED_MSG)
     assert(
-      new Date(qr.expires_at).getTime() > Date.now(),
-      'QRコードの有効期限が切れています（60秒）。もう一度読み取ってください。',
+      qr.kind && PUNCH_KINDS.includes(qr.kind as PunchKind),
+      '種別のないQRです。店舗端末で新しいQRを出してください。',
     )
+    const kind = qr.kind as PunchKind
 
     const storeId = qr.store_id
 
@@ -193,12 +212,12 @@ export const punch = createServerFn({ method: 'POST' })
       }
     }
 
-    // (f) GPS 判定
+    // (f) GPS 判定（block はここで throw = トークン未消費のまま）
     const gpsStatus = resolveGpsStatus(store, data.gps_lat ?? null, data.gps_lng ?? null)
 
     const now = new Date().toISOString()
 
-    // (g) 種別ごとの処理。デモ行は作らない。
+    // (g) 状態の検証のみ先に行う。ここまでのどの失敗でもトークンは消費されない。
     const { data: openRow } = await admin
       .from('attendance')
       .select('id')
@@ -210,10 +229,46 @@ export const punch = createServerFn({ method: 'POST' })
       .limit(1)
       .maybeSingle()
 
+    let openBreak: { id: string } | null = null
+    if (openRow) {
+      const { data: ob } = await admin
+        .from('attendance_breaks')
+        .select('id')
+        .eq('attendance_id', openRow.id)
+        .is('break_end_at', null)
+        .order('break_start_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      openBreak = ob
+    }
+
+    if (kind === 'clock_in') {
+      assert(!openRow, 'すでに出勤中です。退勤してから再度出勤してください。')
+    } else {
+      assert(openRow, '出勤の記録がありません。店舗端末で「出勤」のQRを出してください。')
+      if (kind === 'break_start') assert(!openBreak, 'すでに休憩中です。')
+      if (kind === 'break_end') assert(openBreak, '休憩が開始されていません。')
+      if (kind === 'clock_out')
+        assert(!openBreak, '休憩中は退勤できません。先に休憩を終了してください。')
+    }
+
+    // (h) atomic 消費：未使用かつ未失効の行だけを条件付き UPDATE。
+    //     行ロックにより2人同時は1人だけ更新でき、0件なら他者が先に消費した。
+    //     全検証を通過した後に置くので、検証失敗ではトークンを浪費しない。
+    const { data: consumed, error: consumeErr } = await admin
+      .from('qr_tokens')
+      .update({ used_at: now, used_by: staffId })
+      .eq('id', qr.id)
+      .is('used_at', null)
+      .gt('expires_at', now)
+      .select('id')
+    assert(!consumeErr, '打刻を処理できませんでした。もう一度お試しください。')
+    assert(consumed && consumed.length === 1, USED_OR_EXPIRED_MSG)
+
+    // (i) 書き込み。消費済みなので同じQRでの二重打刻はもう起きない。
     let message: string
 
-    if (data.kind === 'clock_in') {
-      assert(!openRow, 'すでに出勤中です。退勤してから再度出勤してください。')
+    if (kind === 'clock_in') {
       const { error } = await admin.from('attendance').insert({
         tenant_id: caller.tenantId,
         staff_id: staffId,
@@ -225,53 +280,36 @@ export const punch = createServerFn({ method: 'POST' })
         gps_status: gpsStatus,
         is_demo: false,
       })
-      assert(!error, '出勤を記録できませんでした。')
+      assert(!error, '出勤を記録できませんでした。店舗端末で新しいQRを出してください。')
       message = '出勤を記録しました。'
-    } else {
-      assert(openRow, '出勤の記録がありません。先に出勤を打刻してください。')
-
-      const { data: openBreak } = await admin
+    } else if (kind === 'break_start') {
+      const { error } = await admin
         .from('attendance_breaks')
-        .select('id')
-        .eq('attendance_id', openRow.id)
-        .is('break_end_at', null)
-        .order('break_start_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-
-      if (data.kind === 'break_start') {
-        assert(!openBreak, 'すでに休憩中です。')
-        const { error } = await admin
-          .from('attendance_breaks')
-          .insert({ attendance_id: openRow.id, break_start_at: now })
-        assert(!error, '休憩の開始を記録できませんでした。')
-        message = '休憩を開始しました。'
-      } else if (data.kind === 'break_end') {
-        assert(openBreak, '休憩が開始されていません。')
-        const { error } = await admin
-          .from('attendance_breaks')
-          .update({ break_end_at: now })
-          .eq('id', openBreak.id)
-        assert(!error, '休憩の終了を記録できませんでした。')
-        message = '休憩を終了しました。'
-      } else {
-        // clock_out
-        assert(!openBreak, '休憩中は退勤できません。先に休憩を終了してください。')
-        const { error } = await admin
-          .from('attendance')
-          .update({
-            clock_out_at: now,
-            gps_lat: data.gps_lat ?? null,
-            gps_lng: data.gps_lng ?? null,
-            gps_status: gpsStatus,
-          })
-          .eq('id', openRow.id)
-        assert(!error, '退勤を記録できませんでした。')
-        message = '退勤を記録しました。'
-      }
+        .insert({ attendance_id: openRow!.id, break_start_at: now })
+      assert(!error, '休憩の開始を記録できませんでした。店舗端末で新しいQRを出してください。')
+      message = '休憩を開始しました。'
+    } else if (kind === 'break_end') {
+      const { error } = await admin
+        .from('attendance_breaks')
+        .update({ break_end_at: now })
+        .eq('id', openBreak!.id)
+      assert(!error, '休憩の終了を記録できませんでした。店舗端末で新しいQRを出してください。')
+      message = '休憩を終了しました。'
+    } else {
+      const { error } = await admin
+        .from('attendance')
+        .update({
+          clock_out_at: now,
+          gps_lat: data.gps_lat ?? null,
+          gps_lng: data.gps_lng ?? null,
+          gps_status: gpsStatus,
+        })
+        .eq('id', openRow!.id)
+      assert(!error, '退勤を記録できませんでした。店舗端末で新しいQRを出してください。')
+      message = '退勤を記録しました。'
     }
 
-    return { kind: data.kind, gps_status: gpsStatus, store_name: store.name, at: now, message }
+    return { kind, gps_status: gpsStatus, store_name: store.name, at: now, message }
   })
 
 /**

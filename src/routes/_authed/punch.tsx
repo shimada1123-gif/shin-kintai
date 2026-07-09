@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import jsQR from 'jsqr'
 import { errText } from '@/lib/errors'
 import { useMe } from '@/lib/me-context'
-import { myAttendanceToday, punch, type PunchKind } from '@/lib/server/punch'
+import { myAttendanceToday, punch } from '@/lib/server/punch'
 
 export const Route = createFileRoute('/_authed/punch')({
   // 据置QRは /punch?token=... のURLを載せている。標準カメラで読んだ場合はここで受ける。
@@ -13,6 +13,9 @@ export const Route = createFileRoute('/_authed/punch')({
   }),
   component: PunchPage,
 })
+
+const hhmm = (iso: string) =>
+  new Date(iso).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
 
 /**
  * QRペイロードからトークンを取り出す。
@@ -30,9 +33,6 @@ function extractToken(data: string): string | null {
   }
 }
 
-const hhmm = (iso: string) =>
-  new Date(iso).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
-
 /** 打刻の瞬間だけ位置を取る。常時追跡はしない。 */
 function getPosition(): Promise<{ lat: number; lng: number } | null> {
   if (typeof navigator === 'undefined' || !navigator.geolocation) return Promise.resolve(null)
@@ -45,77 +45,101 @@ function getPosition(): Promise<{ lat: number; lng: number } | null> {
   })
 }
 
+/**
+ * モデルB: 種別はQR（トークン）が持つ。スタッフは読むだけで、
+ * トークン取得 → GPS取得 → 即 punch。ボタンで種別を選ぶことはない。
+ */
 function PunchPage() {
   const { me } = useMe()
   const qc = useQueryClient()
   const navigate = useNavigate()
   const { token: tokenFromUrl } = Route.useSearch()
-  const [token, setToken] = useState<string | null>(tokenFromUrl ?? null)
   const [manual, setManual] = useState('')
   const [scanning, setScanning] = useState(false)
   const [scanError, setScanError] = useState<string | null>(null)
   const [result, setResult] = useState<{ ok: boolean; text: string; gps?: string } | null>(null)
-
-  // URL経由で受けたトークンは state に取り込んだら履歴から消す
-  // （履歴・共有リンクに残さない。トークン自体は60秒で失効する）
-  useEffect(() => {
-    if (tokenFromUrl) {
-      setToken(tokenFromUrl)
-      void navigate({ to: '/punch', search: { token: undefined }, replace: true })
-    }
-  }, [tokenFromUrl, navigate])
-
-  // スキャナに渡すコールバックは安定させる。インライン関数だと親の再レンダリング
-  // ごとに useEffect が走り、カメラが停止→再取得を繰り返してしまう。
-  const handleDetect = useCallback((data: string) => {
-    const t = extractToken(data)
-    if (!t) {
-      setScanError('QRコードを解釈できませんでした。店舗の画面を読み取ってください。')
-      setScanning(false)
-      return
-    }
-    setToken(t)
-    setScanning(false)
-    setScanError(null)
-  }, [])
-
-  const handleScanError = useCallback((m: string) => {
-    setScanError(m)
-    setScanning(false)
-  }, [])
+  const [punching, setPunching] = useState(false)
+  // 同じトークンで二度 punch を発火させないためのガード
+  const firedRef = useRef<string | null>(null)
 
   const todayQ = useQuery({ queryKey: ['my_attendance_today'], queryFn: () => myAttendanceToday() })
 
   const doPunch = useMutation({
-    mutationFn: async (kind: PunchKind) => {
+    mutationFn: async (token: string) => {
       const pos = await getPosition()
-      return punch({
-        data: { token: token!, kind, gps_lat: pos?.lat ?? null, gps_lng: pos?.lng ?? null },
-      })
+      return punch({ data: { token, gps_lat: pos?.lat ?? null, gps_lng: pos?.lng ?? null } })
     },
     onSuccess: (r) => {
       setResult({ ok: true, text: r.message, gps: gpsLabel(r.gps_status) })
       void qc.invalidateQueries({ queryKey: ['my_attendance_today'] })
     },
     onError: (e) => setResult({ ok: false, text: errText(e, '打刻できませんでした') }),
+    onSettled: () => setPunching(false),
   })
 
-  if (!me) return null
+  const fire = useCallback(
+    (token: string | null) => {
+      if (!token || firedRef.current === token) return
+      firedRef.current = token
+      setResult(null)
+      setPunching(true)
+      doPunch.mutate(token)
+    },
+    [doPunch],
+  )
 
-  const open = todayQ.data?.find((a) => !a.clock_out_at)
-  const onBreak = open?.breaks.some((b) => !b.break_end_at) ?? false
+  // URL経由のトークンは即発火し、履歴からは消す（トークンは60秒で失効・1回で消費）
+  useEffect(() => {
+    if (tokenFromUrl) {
+      fire(tokenFromUrl)
+      void navigate({ to: '/punch', search: { token: undefined }, replace: true })
+    }
+  }, [tokenFromUrl, fire, navigate])
+
+  const handleDetect = useCallback(
+    (data: string) => {
+      setScanning(false)
+      const t = extractToken(data)
+      if (!t) {
+        setScanError('QRコードを解釈できませんでした。店舗端末のQRを読み取ってください。')
+        return
+      }
+      setScanError(null)
+      fire(t)
+    },
+    [fire],
+  )
+
+  const handleScanError = useCallback((m: string) => {
+    setScanError(m)
+    setScanning(false)
+  }, [])
+
+  if (!me) return null
 
   return (
     <section>
       <div className="eyebrow">SCAN & PUNCH</div>
       <div className="page-h">
         <h1>打刻</h1>
-        <span className="desc">店のQRをスキャンして出勤・退勤。</span>
+        <span className="desc">店舗端末のQRを読むだけ。種別はQRが持っています。</span>
       </div>
 
       <div className="cols">
         <div className="card punch-card">
-          {!token ? (
+          {punching && <p className="note scanned">打刻しています…</p>}
+
+          {result && (
+            <>
+              <p className={result.ok ? 'punch-ok' : 'login-error'} role="alert">
+                {result.text}
+                {result.gps && <span className="punch-gps">{result.gps}</span>}
+              </p>
+              <div className="scan-hint">次の打刻は、店舗端末で新しいQRを出してください。</div>
+            </>
+          )}
+
+          {!punching && (
             <>
               <QrScanner active={scanning} onDetect={handleDetect} onError={handleScanError} />
 
@@ -127,75 +151,33 @@ function PunchPage() {
 
               {scanError && <p className="note scan-warn">{scanError}</p>}
 
-              <div className="manual-token">
-                <div className="eyebrow">MANUAL</div>
-                <p className="note">カメラが使えないときは、店舗画面のトークンを貼り付けてください。</p>
-                <div className="inline-add">
-                  <input
-                    value={manual}
-                    placeholder="トークン"
-                    onChange={(e) => setManual(e.target.value)}
-                  />
-                  <button
-                    className="btn sm"
-                    disabled={!manual.trim()}
-                    onClick={() => setToken(extractToken(manual))}
-                  >
-                    使う
-                  </button>
-                </div>
-              </div>
-            </>
-          ) : (
-            <>
-              <p className="note scanned">QRを読み取りました ✓</p>
-
-              {result && (
-                <p className={result.ok ? 'punch-ok' : 'login-error'} role="alert">
-                  {result.text}
-                  {result.gps && <span className="punch-gps">{result.gps}</span>}
-                </p>
-              )}
-
-              <div className="punchbtns">
-                <button
-                  className="pbtn inb"
-                  disabled={doPunch.isPending || !!open}
-                  onClick={() => doPunch.mutate('clock_in')}
-                >
-                  出勤
-                </button>
-                <button
-                  className="pbtn brkb"
-                  disabled={doPunch.isPending || !open}
-                  onClick={() => doPunch.mutate(onBreak ? 'break_end' : 'break_start')}
-                >
-                  {onBreak ? '休憩 終了' : '休憩 開始'}
-                </button>
-                <button
-                  className="pbtn outb"
-                  disabled={doPunch.isPending || !open}
-                  onClick={() => doPunch.mutate('clock_out')}
-                >
-                  退勤
-                </button>
-              </div>
-
               <div className="scan-hint">
                 位置情報は打刻の瞬間のみ取得し、常時追跡はしません。
                 <br />
                 圏外・取得できない場合も打刻は通り「位置未確認」として記録されます。
               </div>
 
-              <button
-                className="btn sm retake"
-                onClick={() => {
-                  setToken(null)
-                  setResult(null)
-                }}
-              >
-                別のQRを読み取る
-              </button>
+              <div className="manual-token">
+                <div className="eyebrow">MANUAL</div>
+                <p className="note">カメラが使えないときは、店舗端末のトークンを貼り付けてください。</p>
+                <div className="inline-add">
+                  <input
+                    value={manual}
+                    placeholder="トークン または URL"
+                    onChange={(e) => setManual(e.target.value)}
+                  />
+                  <button
+                    className="btn sm"
+                    disabled={!manual.trim()}
+                    onClick={() => {
+                      fire(extractToken(manual))
+                      setManual('')
+                    }}
+                  >
+                    打刻
+                  </button>
+                </div>
+              </div>
             </>
           )}
         </div>

@@ -415,22 +415,31 @@ export type Database = {
           expires_at: string
           id: string
           issued_at: string
+          kind: string | null
           store_id: string
           token: string
+          used_at: string | null
+          used_by: string | null
         }
         Insert: {
           expires_at: string
           id?: string
           issued_at?: string
+          kind?: string | null
           store_id: string
           token: string
+          used_at?: string | null
+          used_by?: string | null
         }
         Update: {
           expires_at?: string
           id?: string
           issued_at?: string
+          kind?: string | null
           store_id?: string
           token?: string
+          used_at?: string | null
+          used_by?: string | null
         }
         Relationships: [
           {
@@ -438,6 +447,13 @@ export type Database = {
             columns: ["store_id"]
             isOneToOne: false
             referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qr_tokens_used_by_fkey"
+            columns: ["used_by"]
+            isOneToOne: false
+            referencedRelation: "staff"
             referencedColumns: ["id"]
           },
         ]

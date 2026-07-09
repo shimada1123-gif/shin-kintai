@@ -1370,6 +1370,43 @@ tr:last-child td {
   margin-top: 8px;
 }
 
+/* モデルB: 種別ボタンと使い捨てQR */
+.display-kinds {
+  width: 100%;
+  margin-top: 14px;
+}
+
+.display-kind-tag {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--gold);
+  margin-top: 4px;
+}
+
+.qrbox {
+  position: relative;
+}
+
+.qr-expired canvas {
+  opacity: 0.15;
+}
+
+.qr-expired-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+  color: var(--red);
+  font-size: 15px;
+}
+
+.reissue {
+  margin-top: 12px;
+}
+
 .display-url {
   font-size: 11.5px;
   word-break: break-all;
