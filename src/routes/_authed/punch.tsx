@@ -5,7 +5,7 @@ import jsQR from 'jsqr'
 import { errText } from '@/lib/errors'
 import { useMe } from '@/lib/me-context'
 import { myAttendanceToday, punch, type PunchKind } from '@/lib/server/punch'
-import { initSoundUnlock, playPunchError, playPunchSuccess, vibrate } from '@/lib/sound'
+import { initSoundUnlock, playPunchError, playPunchSuccess, unlockAudio, vibrate } from '@/lib/sound'
 
 export const Route = createFileRoute('/_authed/punch')({
   // 据置QRは /punch?token=... のURLを載せている。標準カメラで読んだ場合はここで受ける。
@@ -153,7 +153,10 @@ function PunchPage() {
         <button
           className="btn sm sound-toggle"
           aria-label={soundOn ? '効果音をオフにする' : '効果音をオンにする'}
-          onClick={() => setSoundOn((v) => !v)}
+          onClick={() => {
+            unlockAudio() // タップ＝ユーザー操作の中で解除しておく
+            setSoundOn((v) => !v)
+          }}
         >
           {soundOn ? '🔊 音あり' : '🔇 音なし'}
         </button>
@@ -199,7 +202,13 @@ function PunchPage() {
               <QrScanner active={scanning} onDetect={handleDetect} onError={handleScanError} />
 
               {!scanning && (
-                <button className="btn pri" onClick={() => setScanning(true)}>
+                <button
+                  className="btn pri"
+                  onClick={() => {
+                    unlockAudio() // スキャン開始のタップで解除 → 検出後の結果音が確実に鳴る
+                    setScanning(true)
+                  }}
+                >
                   カメラでQRをスキャン
                 </button>
               )}
@@ -225,6 +234,7 @@ function PunchPage() {
                     className="btn sm"
                     disabled={!manual.trim()}
                     onClick={() => {
+                      unlockAudio()
                       fire(extractToken(manual))
                       setManual('')
                     }}
