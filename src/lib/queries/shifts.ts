@@ -267,6 +267,145 @@ export function reqErrText(e: unknown): string {
   return errText(e, '必要人数を保存できませんでした')
 }
 
+/* --------------------------- 確定シフト（段階2-b） --------------------------- */
+
+export interface ShiftAsg {
+  id: string
+  store_id: string
+  staff_id: string
+  work_date: string
+  start_min: number
+  end_min: number
+  position_id: string | null
+  weight_half: boolean
+  status: 'draft' | 'published'
+  note: string | null
+  staff_name: string
+}
+
+const ASG_SELECT =
+  'id, store_id, staff_id, work_date, start_min, end_min, position_id, weight_half, status, note, staff (full_name)'
+
+function toAsg(r: Record<string, unknown>): ShiftAsg {
+  const staff = r.staff as { full_name: string } | null
+  return {
+    id: r.id as string,
+    store_id: r.store_id as string,
+    staff_id: r.staff_id as string,
+    work_date: r.work_date as string,
+    start_min: r.start_min as number,
+    end_min: r.end_min as number,
+    position_id: r.position_id as string | null,
+    weight_half: r.weight_half as boolean,
+    status: r.status as 'draft' | 'published',
+    note: r.note as string | null,
+    staff_name: staff?.full_name ?? '',
+  }
+}
+
+export async function fetchAssignments(
+  storeId: string,
+  fromDay: string,
+  toDay: string,
+): Promise<ShiftAsg[]> {
+  const supabase = await getSupabase()
+  const { data, error } = await supabase
+    .from('shift_assignments')
+    .select(ASG_SELECT)
+    .eq('store_id', storeId)
+    .gte('work_date', fromDay)
+    .lte('work_date', toDay)
+    .order('work_date')
+    .order('start_min')
+  if (error) throw error
+  return (data ?? []).map((r) => toAsg(r as Record<string, unknown>))
+}
+
+export function validateAsgTimes(startMin: number | null, endMin: number | null) {
+  if (startMin === null || endMin === null) {
+    throw new Error('開始と終了の時刻を入力してください。')
+  }
+  if (startMin < 0 || startMin > 1439 || endMin < 0 || endMin > 1439) {
+    throw new Error('時刻は 00:00〜23:59 の範囲で入力してください。')
+  }
+  if (startMin >= endMin) {
+    throw new Error('開始時刻は終了時刻より前にしてください。')
+  }
+}
+
+export interface CreateAsgArgs {
+  tenantId: string
+  storeId: string
+  staffId: string
+  workDate: string
+  startMin: number | null
+  endMin: number | null
+  positionId: string | null
+  weightHalf: boolean
+  note?: string | null
+}
+
+/** 段階2-b は下書き（draft）のみ作成する。公開（published）は次の段階。 */
+export async function createAssignment(a: CreateAsgArgs): Promise<void> {
+  validateAsgTimes(a.startMin, a.endMin)
+  const supabase = await getSupabase()
+  const { error } = await supabase.from('shift_assignments').insert({
+    tenant_id: a.tenantId,
+    store_id: a.storeId,
+    staff_id: a.staffId,
+    work_date: a.workDate,
+    start_min: a.startMin!,
+    end_min: a.endMin!,
+    position_id: a.positionId,
+    weight_half: a.weightHalf,
+    status: 'draft',
+    note: a.note ?? null,
+  })
+  if (error) throw error
+}
+
+export interface UpdateAsgArgs {
+  startMin: number | null
+  endMin: number | null
+  positionId: string | null
+  weightHalf: boolean
+  note?: string | null
+}
+
+export async function updateAssignment(id: string, a: UpdateAsgArgs): Promise<void> {
+  validateAsgTimes(a.startMin, a.endMin)
+  const supabase = await getSupabase()
+  const { error } = await supabase
+    .from('shift_assignments')
+    .update({
+      start_min: a.startMin!,
+      end_min: a.endMin!,
+      position_id: a.positionId,
+      weight_half: a.weightHalf,
+      note: a.note ?? null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+  if (error) throw error
+}
+
+export async function deleteAssignment(id: string): Promise<void> {
+  const supabase = await getSupabase()
+  const { error } = await supabase.from('shift_assignments').delete().eq('id', id)
+  if (error) throw error
+}
+
+/** 確定シフト操作のRLS違反を具体的な日本語に */
+export function asgErrText(e: unknown): string {
+  if (e instanceof Error) {
+    const code = 'code' in e ? (e as { code?: string }).code : undefined
+    if (code === '42501' || /row-level security/i.test(e.message)) {
+      return 'シフトを保存できません。シフト編集権限（shift_edit）と、自分のスコープ内の店舗であることが必要です。'
+    }
+  }
+  return errText(e, 'シフトを保存できませんでした')
+}
+
 /* ------------------------------ 時刻ヘルパー ------------------------------ */
 
 export const minToHHMM = (min: number | null): string => {

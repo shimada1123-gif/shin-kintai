@@ -6,9 +6,13 @@ import { useMe } from '@/lib/me-context'
 import { usePermissions } from '@/lib/perm'
 import { fetchEmploymentKinds, fetchPositions, fetchStaffList } from '@/lib/queries/master'
 import {
+  asgErrText,
   availErrText,
+  createAssignment,
   DAY_TYPES,
+  deleteAssignment,
   deleteAvailability,
+  fetchAssignments,
   fetchHolidays,
   fetchMyAvailability,
   fetchMyStores,
@@ -17,12 +21,14 @@ import {
   hhmmToMin,
   minToHHMM,
   reqErrText,
+  updateAssignment,
   upsertAvailability,
   upsertRequirement,
   type AvailKind,
   type AvailRow,
   type DayType,
   type RequirementRow,
+  type ShiftAsg,
 } from '@/lib/queries/shifts'
 import { ymd } from '@/lib/worktime'
 
@@ -70,7 +76,7 @@ function ShiftsPage() {
 
   const canEdit = perms.has('shift_edit')
   const hasSelf = !!me?.staffId
-  const [tab, setTab] = useState<'matrix' | 'req' | 'mine'>('mine')
+  const [tab, setTab] = useState<'matrix' | 'build' | 'req' | 'mine'>('mine')
 
   // 権限が確定したら初期タブを決める（管理者はマトリクスが主）
   useEffect(() => {
@@ -96,11 +102,13 @@ function ShiftsPage() {
 
   return (
     <section>
-      <div className="eyebrow">シフト · 段階1（希望収集）</div>
+      <div className="eyebrow">シフト</div>
       <div className="page-h">
-        <h1>シフト希望</h1>
+        <h1>シフト</h1>
         <span className="desc">
-          {canEdit ? '希望の収集と代理入力。シフト表の作成は次の段階です。' : '○△×で希望を出します。'}
+          {canEdit
+            ? '希望の収集 → 必要人数 → 週ビューで配置（下書き）。公開は次の段階です。'
+            : '○△×で希望を出します。'}
         </span>
       </div>
 
@@ -108,6 +116,9 @@ function ShiftsPage() {
         <div className="tab-row">
           <button className={`tab${tab === 'matrix' ? ' on' : ''}`} onClick={() => setTab('matrix')}>
             希望一覧（全員）
+          </button>
+          <button className={`tab${tab === 'build' ? ' on' : ''}`} onClick={() => setTab('build')}>
+            シフト作成
           </button>
           <button className={`tab${tab === 'req' ? ' on' : ''}`} onClick={() => setTab('req')}>
             必要人数
@@ -120,7 +131,9 @@ function ShiftsPage() {
         </div>
       )}
 
-      {tab === 'req' && canEdit ? (
+      {tab === 'build' && canEdit ? (
+        <BuildView />
+      ) : tab === 'req' && canEdit ? (
         <RequirementsView />
       ) : tab === 'matrix' && canEdit ? (
         <MatrixView />
@@ -917,6 +930,399 @@ function RequirementRowEditor({
           {error}
         </p>
       )}
+    </div>
+  )
+}
+
+/* -------------------------- 管理者: シフト作成（週） -------------------------- */
+
+interface WeekMeta {
+  label: string
+  from: string
+  to: string
+  days: { date: string; dayNum: number; dow: number }[]
+}
+
+/** 日曜始まりの1週間 */
+function weekMeta(base: Date): WeekMeta {
+  const sun = new Date(base.getFullYear(), base.getMonth(), base.getDate() - base.getDay())
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(sun.getFullYear(), sun.getMonth(), sun.getDate() + i)
+    return { date: ymd(d), dayNum: d.getDate(), dow: d.getDay() }
+  })
+  const fmt = (s: string) => {
+    const d = new Date(`${s}T00:00:00`)
+    return `${d.getMonth() + 1}/${d.getDate()}`
+  }
+  return {
+    label: `${fmt(days[0].date)}〜${fmt(days[6].date)}`,
+    from: days[0].date,
+    to: days[6].date,
+    days,
+  }
+}
+
+function dayTypeOf(dow: number, isHoliday: boolean): DayType {
+  if (isHoliday) return 'holiday'
+  if (dow === 0) return 'sun'
+  if (dow === 6) return 'sat'
+  if (dow === 5) return 'fri'
+  return 'weekday'
+}
+
+function BuildView() {
+  const { me } = useMe()
+  const [storeId, setStoreId] = useState('')
+  const [weekBase, setWeekBase] = useState(() => new Date())
+  const [editing, setEditing] = useState<
+    | { mode: 'create'; date: string; staffId: string; staffName: string; avail: AvailRow | null }
+    | { mode: 'edit'; asg: ShiftAsg }
+    | null
+  >(null)
+  const week = useMemo(() => weekMeta(weekBase), [weekBase])
+
+  useEffect(() => {
+    if (!storeId && me?.stores.length) setStoreId(me.stores[0].id)
+  }, [me?.stores, storeId])
+
+  const asgQ = useQuery({
+    queryKey: ['shift_asg', storeId, week.from],
+    enabled: !!storeId,
+    queryFn: () => fetchAssignments(storeId, week.from, week.to),
+  })
+  const availQ = useQuery({
+    queryKey: ['avail', 'store', storeId, 'wk', week.from],
+    enabled: !!storeId,
+    queryFn: () => fetchStoreAvailability(storeId, week.from, week.to),
+  })
+  const reqQ = useQuery({
+    queryKey: ['shift_req', storeId],
+    enabled: !!storeId,
+    queryFn: () => fetchRequirements(storeId),
+  })
+  const posQ = useQuery({ queryKey: ['master', 'positions'], queryFn: fetchPositions })
+  const holidaysQ = useQuery({
+    queryKey: ['holidays', week.from, 'wk'],
+    queryFn: () => fetchHolidays(week.from, week.to),
+  })
+
+  if (!me) return null
+
+  const positions = (posQ.data ?? []).filter((p) => p.store_id === null || p.store_id === storeId)
+  const posName = (id: string | null) =>
+    id ? (positions.find((p) => p.id === id)?.name ?? 'ポジション') : null
+  const reqByType = new Map((reqQ.data ?? []).map((r) => [r.day_type, r]))
+  const holidays = holidaysQ.data ?? new Map<string, string>()
+
+  return (
+    <>
+      <div className="filter-row">
+        <div className="month-nav">
+          <button
+            className="btn sm"
+            aria-label="前の週"
+            onClick={() =>
+              setWeekBase(new Date(weekBase.getFullYear(), weekBase.getMonth(), weekBase.getDate() - 7))
+            }
+          >
+            ←
+          </button>
+          <span className="month-label mono">{week.label}</span>
+          <button
+            className="btn sm"
+            aria-label="次の週"
+            onClick={() =>
+              setWeekBase(new Date(weekBase.getFullYear(), weekBase.getMonth(), weekBase.getDate() + 7))
+            }
+          >
+            →
+          </button>
+        </div>
+        <label className="field">
+          <span>店舗</span>
+          <select value={storeId} onChange={(e) => setStoreId(e.target.value)}>
+            {me.stores.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      {(asgQ.error || availQ.error) && (
+        <p className="login-error" role="alert">
+          {asgErrText(asgQ.error ?? availQ.error)}
+        </p>
+      )}
+
+      <div className="week-grid">
+        {week.days.map((d) => {
+          const holiday = holidays.get(d.date)
+          const dt = dayTypeOf(d.dow, !!holiday)
+          const req = reqByType.get(dt) ?? null
+          const dayAsgs = (asgQ.data ?? []).filter((a) => a.work_date === d.date)
+          const assignedStaff = new Set(dayAsgs.map((a) => a.staff_id))
+          const pool = (availQ.data ?? []).filter(
+            (r) => r.work_date === d.date && r.kind !== 'off' && !assignedStaff.has(r.staff_id),
+          )
+          const weightOf = (a: ShiftAsg) => (a.weight_half ? 0.5 : 1)
+          const total = dayAsgs.reduce((s, a) => s + weightOf(a), 0)
+          const need = req?.need_count ?? 0
+          const byPos = new Map<string, number>()
+          for (const a of dayAsgs) {
+            const n = posName(a.position_id)
+            if (n) byPos.set(n, (byPos.get(n) ?? 0) + weightOf(a))
+          }
+          const dayCls = holiday || d.dow === 0 ? ' sun' : d.dow === 6 ? ' sat' : ''
+
+          return (
+            <div key={d.date} className="day-card card">
+              <div className="day-head">
+                <span className={`cal-num mono${dayCls}`}>
+                  {d.dayNum}
+                  <small className="day-dow">（{DOW_LABELS[d.dow]}）</small>
+                </span>
+                {holiday && <span className="cal-holiday">{holiday}</span>}
+                {need > 0 && (
+                  <span className={`cov-total mono${total >= need ? ' ok' : ' short'}`}>
+                    {total}/{need}
+                  </span>
+                )}
+              </div>
+
+              {req && Object.keys(req.need_by_position).length > 0 && (
+                <div className="cov-rows">
+                  {Object.entries(req.need_by_position).map(([name, needN]) => {
+                    const got = byPos.get(name) ?? 0
+                    return (
+                      <span key={name} className={`cov mono${got >= needN ? ' ok' : ' short'}`}>
+                        {name} {got}/{needN}
+                      </span>
+                    )
+                  })}
+                </div>
+              )}
+
+              <div className="day-asgs">
+                {dayAsgs.map((a) => (
+                  <button
+                    key={a.id}
+                    type="button"
+                    className="asg-chip"
+                    title={a.note ?? undefined}
+                    onClick={() => setEditing({ mode: 'edit', asg: a })}
+                  >
+                    <b>{a.staff_name}</b>
+                    {a.weight_half && <span className="half-mark">0.5</span>}
+                    <span className="mono asg-time">
+                      {minToHHMM(a.start_min)}-{minToHHMM(a.end_min)}
+                    </span>
+                    {posName(a.position_id) && (
+                      <span className="asg-pos">{posName(a.position_id)}</span>
+                    )}
+                  </button>
+                ))}
+                {dayAsgs.length === 0 && <span className="note day-empty">未配置</span>}
+              </div>
+
+              {pool.length > 0 && (
+                <div className="day-pool">
+                  <div className="pool-lab">希望者（タップで配置）</div>
+                  {pool.map((r) => (
+                    <button
+                      key={r.id}
+                      type="button"
+                      className="pool-chip"
+                      onClick={() =>
+                        setEditing({
+                          mode: 'create',
+                          date: d.date,
+                          staffId: r.staff_id,
+                          staffName: r.staff_name,
+                          avail: r,
+                        })
+                      }
+                    >
+                      {KIND_MARK[r.kind]} {r.staff_name}
+                      {r.kind === 'partial' && (
+                        <span className="mono pool-time">
+                          {minToHHMM(r.start_min)}-{minToHHMM(r.end_min)}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      <p className="note">
+        希望を出した人だけが各日の「希望者」に並びます。タップで下書き（draft）として配置し、
+        配置済みチップのタップで時間・ポジション・0.5換算の編集や削除ができます。
+        公開（スタッフへの通知）は次の段階です。
+      </p>
+
+      {editing && storeId && (
+        <AsgEditorModal
+          storeId={storeId}
+          positions={positions}
+          editing={editing}
+          onClose={() => setEditing(null)}
+        />
+      )}
+    </>
+  )
+}
+
+function AsgEditorModal({
+  storeId,
+  positions,
+  editing,
+  onClose,
+}: {
+  storeId: string
+  positions: { id: string; name: string }[]
+  editing:
+    | { mode: 'create'; date: string; staffId: string; staffName: string; avail: AvailRow | null }
+    | { mode: 'edit'; asg: ShiftAsg }
+  onClose: () => void
+}) {
+  const { me } = useMe()
+  const qc = useQueryClient()
+  const isEdit = editing.mode === 'edit'
+
+  // 初期値: 編集=既存値 / 新規=△なら希望時間、○なら17-22（毎正時）
+  const init = isEdit
+    ? { start: minToHHMM(editing.asg.start_min), end: minToHHMM(editing.asg.end_min) }
+    : editing.avail?.kind === 'partial'
+      ? { start: minToHHMM(editing.avail.start_min), end: minToHHMM(editing.avail.end_min) }
+      : { start: '17:00', end: '22:00' }
+
+  const [start, setStart] = useState(init.start)
+  const [end, setEnd] = useState(init.end)
+  const [positionId, setPositionId] = useState(isEdit ? (editing.asg.position_id ?? '') : '')
+  const [half, setHalf] = useState(isEdit ? editing.asg.weight_half : false)
+  const [note, setNote] = useState(isEdit ? (editing.asg.note ?? '') : '')
+  const [error, setError] = useState<string | null>(null)
+
+  const invalidate = () => {
+    void qc.invalidateQueries({ queryKey: ['shift_asg'] })
+    onClose()
+  }
+
+  const save = useMutation({
+    mutationFn: () =>
+      isEdit
+        ? updateAssignment(editing.asg.id, {
+            startMin: hhmmToMin(start),
+            endMin: hhmmToMin(end),
+            positionId: positionId || null,
+            weightHalf: half,
+            note: note.trim() || null,
+          })
+        : createAssignment({
+            tenantId: me!.tenantId,
+            storeId,
+            staffId: editing.staffId,
+            workDate: editing.date,
+            startMin: hhmmToMin(start),
+            endMin: hhmmToMin(end),
+            positionId: positionId || null,
+            weightHalf: half,
+            note: note.trim() || null,
+          }),
+    onSuccess: invalidate,
+    onError: (e) => setError(asgErrText(e)),
+  })
+
+  const remove = useMutation({
+    mutationFn: () => deleteAssignment((editing as { asg: ShiftAsg }).asg.id),
+    onSuccess: invalidate,
+    onError: (e) => setError(asgErrText(e)),
+  })
+
+  const staffName = isEdit ? editing.asg.staff_name : editing.staffName
+  const date = isEdit ? editing.asg.work_date : editing.date
+  const dateLabel = new Date(`${date}T00:00:00`).toLocaleDateString('ja-JP', {
+    month: 'long',
+    day: 'numeric',
+    weekday: 'short',
+  })
+
+  return (
+    <div className="modal show" onClick={onClose} role="dialog" aria-modal="true">
+      <div className="mcard mcard-wide" onClick={(e) => e.stopPropagation()}>
+        <div className="mh">
+          {dateLabel} · {staffName} のシフト{isEdit ? 'を編集' : 'を配置（下書き）'}
+        </div>
+
+        {error && (
+          <p className="login-error" role="alert">
+            {error}
+          </p>
+        )}
+
+        <div className="asg-grid">
+          <label className="field">
+            <span>開始</span>
+            <input type="time" step={3600} value={start} onChange={(e) => setStart(e.target.value)} />
+          </label>
+          <label className="field">
+            <span>終了</span>
+            <input type="time" step={3600} value={end} onChange={(e) => setEnd(e.target.value)} />
+          </label>
+        </div>
+
+        <div className="asg-grid">
+          <label className="field">
+            <span>ポジション</span>
+            <select value={positionId} onChange={(e) => setPositionId(e.target.value)}>
+              <option value="">未設定</option>
+              {positions.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="field">
+            <span>換算</span>
+            <label className="tgl asg-half">
+              <span className={`cbx2${half ? ' on' : ''}`} onClick={() => setHalf((v) => !v)} />
+              0.5換算（新人・補助）
+            </label>
+          </div>
+        </div>
+
+        <label className="field">
+          <span>メモ（任意）</span>
+          <input className="ri" value={note} onChange={(e) => setNote(e.target.value)} />
+        </label>
+
+        <div className="mbtns">
+          {isEdit && (
+            <button className="btn sm danger" disabled={remove.isPending} onClick={() => remove.mutate()}>
+              配置を削除
+            </button>
+          )}
+          <button className="btn sm" onClick={onClose}>
+            閉じる
+          </button>
+          <button
+            className="btn sm pri"
+            disabled={save.isPending}
+            onClick={() => {
+              setError(null)
+              save.mutate()
+            }}
+          >
+            {save.isPending ? '保存中…' : isEdit ? '保存' : '下書きに配置'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

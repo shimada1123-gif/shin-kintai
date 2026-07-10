@@ -2370,6 +2370,196 @@ th.mx-day.sat .mx-dow {
   }
 }
 
+/* ---------- シフト作成（週ビュー） ---------- */
+.week-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+  align-items: start;
+}
+
+.day-card {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 150px;
+}
+
+.day-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+  border-bottom: 1px dashed var(--line-2);
+  padding-bottom: 6px;
+}
+
+.day-dow {
+  font-size: 10px;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.cov-total {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 10px;
+}
+
+.cov-total.ok {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.cov-total.short {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.cov-rows {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.cov {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 9px;
+}
+
+.cov.ok {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.cov.short {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.day-asgs {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.day-empty {
+  font-size: 11px;
+}
+
+.asg-chip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  text-align: left;
+  font-family: var(--jp);
+  font-size: 11.5px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--indigo);
+  border-radius: 7px;
+  background: var(--card);
+  cursor: pointer;
+}
+
+.asg-chip:hover {
+  border-color: var(--indigo);
+}
+
+.asg-chip b {
+  white-space: nowrap;
+}
+
+.asg-time {
+  font-size: 10px;
+  color: var(--ink-2);
+}
+
+.asg-pos {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--indigo);
+  background: #eff1f5;
+  border-radius: 8px;
+  padding: 1px 6px;
+}
+
+.half-mark {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  color: #7a5a10;
+  background: var(--gold-soft);
+  border-radius: 7px;
+  padding: 1px 5px;
+}
+
+.day-pool {
+  border-top: 1px dashed var(--line-2);
+  padding-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pool-lab {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+
+.pool-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  text-align: left;
+  font-family: var(--jp);
+  font-size: 11.5px;
+  padding: 5px 8px;
+  border: 1px dashed var(--line);
+  border-radius: 7px;
+  background: #fdfcfa;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.pool-chip:hover {
+  border-color: var(--gold);
+  background: #fffdf7;
+}
+
+.pool-time {
+  font-size: 9.5px;
+  color: var(--muted);
+}
+
+.asg-half {
+  padding-top: 9px;
+}
+
+@media (max-width: 900px) {
+  .week-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .week-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .day-card {
+    min-height: 0;
+  }
+}
+
 /* ---------- 必要人数（要件テンプレート） ---------- */
 .req-row {
   padding: 14px 16px;
