@@ -7,6 +7,7 @@ import { useMe } from '@/lib/me-context'
 import { usePermissions } from '@/lib/perm'
 import { annErrText, createAnnouncement } from '@/lib/queries/announcements'
 import { sendAnnouncementMail } from '@/lib/server/announce-mail'
+import { createOffers } from '@/lib/server/offer-create'
 import { fetchEmploymentKinds, fetchPositions, fetchStaffList } from '@/lib/queries/master'
 import {
   asgErrText,
@@ -1353,6 +1354,9 @@ function BuildView() {
       {adding && storeId && (
         <AddStaffModal
           date={adding}
+          storeId={storeId}
+          positions={positions}
+          weekDays={week.days}
           roster={rosterQ.data ?? []}
           rosterLoading={rosterQ.isPending}
           avails={(availQ.data ?? []).filter((r) => r.work_date === adding)}
@@ -1388,9 +1392,18 @@ function BuildView() {
   )
 }
 
-/** 希望の有無に関わらず所属スタッフから選んで配置するモーダル */
+/** datetime-local 用のローカル時刻文字列 */
+function localDatetimeValue(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+/** 希望の有無に関わらず所属スタッフから選んで配置 / オファー招待を送るモーダル */
 function AddStaffModal({
   date,
+  storeId,
+  positions,
+  weekDays,
   roster,
   rosterLoading,
   avails,
@@ -1399,6 +1412,9 @@ function AddStaffModal({
   onClose,
 }: {
   date: string
+  storeId: string
+  positions: { id: string; name: string }[]
+  weekDays: { date: string; dayNum: number; dow: number }[]
   roster: RosterEntry[]
   rosterLoading: boolean
   avails: AvailRow[]
@@ -1406,6 +1422,60 @@ function AddStaffModal({
   onPick: (entry: RosterEntry, avail: AvailRow | null) => void
   onClose: () => void
 }) {
+  const [tab, setTab] = useState<'add' | 'offer'>('add')
+
+  // ---- オファータブの状態（既定: そのカードの日・17-22・締切48h後） ----
+  const [offDates, setOffDates] = useState<string[]>([date])
+  const [offPos, setOffPos] = useState('')
+  const [offStart, setOffStart] = useState('17:00')
+  const [offEnd, setOffEnd] = useState('22:00')
+  const [offDeadline, setOffDeadline] = useState(() =>
+    localDatetimeValue(new Date(Date.now() + 48 * 3600 * 1000)),
+  )
+  const [offStaff, setOffStaff] = useState<string[]>([])
+  const [offErr, setOffErr] = useState<string | null>(null)
+  const [offMsg, setOffMsg] = useState<string | null>(null)
+
+  const toggle = (list: string[], v: string): string[] =>
+    list.includes(v) ? list.filter((x) => x !== v) : [...list, v]
+
+  const send = useMutation({
+    mutationFn: async () => {
+      const s = hhmmToMin(offStart)
+      const e = hhmmToMin(offEnd)
+      if (s === null || e === null || s >= e) {
+        throw new Error('開始と終了の時間を正しく入力してください。')
+      }
+      if (offDates.length === 0) throw new Error('対象日を選んでください。')
+      if (offStaff.length === 0) throw new Error('招待する人を選んでください。')
+      const dl = new Date(offDeadline)
+      if (Number.isNaN(dl.getTime()) || dl.getTime() <= Date.now()) {
+        throw new Error('締切は未来の日時にしてください。')
+      }
+      return createOffers({
+        data: {
+          store_id: storeId,
+          drafts: [...offDates].sort().map((d) => ({
+            work_date: d,
+            position_id: offPos || null,
+            start_min: s,
+            end_min: e,
+            deadline_at: dl.toISOString(),
+            staff_ids: offStaff,
+          })),
+        },
+      })
+    },
+    onSuccess: (r) => {
+      setOffMsg(
+        `作成 ${r.created_offers}枠 / 招待 ${r.invited}名 / メール送信 ${r.mail_ok}件` +
+          (r.mail_failed > 0 ? `・失敗 ${r.mail_failed}件` : '') +
+          (r.skipped.length > 0 ? ` / スキップ ${r.skipped.length}件` : ''),
+      )
+    },
+    onError: (e) => setOffErr(e instanceof Error ? e.message : '送信に失敗しました。'),
+  })
+
   const availBy = new Map(avails.map((r) => [r.staff_id, r]))
   const dateLabel = new Date(`${date}T00:00:00`).toLocaleDateString('ja-JP', {
     month: 'long',
@@ -1413,16 +1483,166 @@ function AddStaffModal({
     weekday: 'short',
   })
 
+  const firstDate = [...offDates].sort()[0]
+  const firstLabel = firstDate
+    ? new Date(`${firstDate}T00:00:00`).toLocaleDateString('ja-JP', {
+        month: 'numeric',
+        day: 'numeric',
+      })
+    : ''
+
   return (
     <div className="modal show" onClick={onClose} role="dialog" aria-modal="true">
       <div className="mcard mcard-wide" onClick={(e) => e.stopPropagation()}>
-        <div className="mh">{dateLabel} · スタッフを追加（希望に関わらず配置）</div>
+        <div className="mh">{dateLabel} · スタッフ</div>
+
+        <div className="pick-row modal-tabs">
+          <button
+            type="button"
+            className={`pick-btn${tab === 'add' ? ' on' : ''}`}
+            onClick={() => setTab('add')}
+          >
+            追加（直接配置）
+          </button>
+          <button
+            type="button"
+            className={`pick-btn${tab === 'offer' ? ' on' : ''}`}
+            onClick={() => setTab('offer')}
+          >
+            オファー（メール招待）
+          </button>
+        </div>
 
         {rosterLoading && <p className="note">読み込み中…</p>}
         {!rosterLoading && roster.length === 0 && (
           <p className="note">追加できるスタッフがいません。</p>
         )}
 
+        {tab === 'offer' && !rosterLoading && roster.length > 0 && (
+          <div className="offer-compose">
+            {offErr && (
+              <p className="login-error" role="alert">
+                {offErr}
+              </p>
+            )}
+            {offMsg && (
+              <p className="board-info" role="status">
+                {offMsg}
+              </p>
+            )}
+
+            <div className="field board-field">
+              <span>対象日（複数可・同じ時間帯で1日=1枠）</span>
+              <div className="target-checks">
+                {weekDays.map((d) => (
+                  <label key={d.date} className="target-check">
+                    <input
+                      type="checkbox"
+                      checked={offDates.includes(d.date)}
+                      onChange={() => setOffDates((prev) => toggle(prev, d.date))}
+                    />
+                    <span>
+                      {d.dayNum}
+                      <small>（{DOW_LABELS[d.dow]}）</small>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="asg-grid">
+              <label className="field">
+                <span>開始</span>
+                <input
+                  type="time"
+                  step={3600}
+                  value={offStart}
+                  onChange={(e) => setOffStart(e.target.value)}
+                />
+              </label>
+              <label className="field">
+                <span>終了</span>
+                <input
+                  type="time"
+                  step={3600}
+                  value={offEnd}
+                  onChange={(e) => setOffEnd(e.target.value)}
+                />
+              </label>
+            </div>
+
+            <div className="asg-grid">
+              <label className="field">
+                <span>ポジション</span>
+                <select value={offPos} onChange={(e) => setOffPos(e.target.value)}>
+                  <option value="">不問</option>
+                  {positions.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>回答締切</span>
+                <input
+                  type="datetime-local"
+                  value={offDeadline}
+                  onChange={(e) => setOffDeadline(e.target.value)}
+                />
+              </label>
+            </div>
+
+            <div className="field board-field">
+              <span>招待する人（複数可）</span>
+              <div className="target-checks">
+                {roster.map((s) => (
+                  <label key={s.staffId} className="target-check">
+                    <input
+                      type="checkbox"
+                      checked={offStaff.includes(s.staffId)}
+                      onChange={() => setOffStaff((prev) => toggle(prev, s.staffId))}
+                    />
+                    <span>
+                      {s.name}
+                      {s.kindLabel && <span className="muted-tag">{s.kindLabel}</span>}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <p className="note">
+              招待メールの承諾は<b>申請</b>として集まり、確定はあなたの承認（確定操作）後です。
+            </p>
+
+            <div className="mbtns">
+              <button className="btn sm" onClick={onClose}>
+                閉じる
+              </button>
+              <button
+                className="btn sm pri"
+                disabled={send.isPending}
+                onClick={() => {
+                  setOffErr(null)
+                  setOffMsg(null)
+                  if (
+                    confirm(
+                      `${firstLabel}〜 ${offDates.length}枠に ${offStaff.length}名へオファーを送ります。よろしいですか？`,
+                    )
+                  ) {
+                    send.mutate()
+                  }
+                }}
+              >
+                {send.isPending ? '送信中…' : 'オファーを送信'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {tab === 'add' && (
+          <>
         <div className="roster-list">
           {roster.map((s) => {
             const av = availBy.get(s.staffId) ?? null
@@ -1461,6 +1681,8 @@ function AddStaffModal({
             閉じる
           </button>
         </div>
+          </>
+        )}
       </div>
     </div>
   )

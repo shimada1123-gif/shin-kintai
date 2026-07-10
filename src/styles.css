@@ -3761,3 +3761,12 @@ h3,
 .offer-decline-link:hover {
   color: var(--red);
 }
+
+/* オファータブ（AddStaffModal） */
+.modal-tabs {
+  margin-bottom: 14px;
+}
+
+.offer-compose .board-field {
+  margin-top: 12px;
+}
