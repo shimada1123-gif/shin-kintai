@@ -169,28 +169,28 @@ export async function createAnnouncement(
 ): Promise<void> {
   validateDraft(d)
   const supabase = await getSupabase()
-  const { data: created, error } = await supabase
-    .from('announcements')
-    .insert({
-      tenant_id: tenantId,
-      author: authorId,
-      title: d.title.trim(),
-      body: d.body.trim(),
-      importance: d.importance,
-      scope_type: d.scopeType,
-    })
-    .select('id')
-    .single()
+  // RETURNING（insert().select()）は ann_sel の評価対象になり、可視性ヘルパーが
+  // 同一ステートメント内の挿入行を参照できず失敗する。id はクライアント生成で回避する。
+  const id = crypto.randomUUID()
+  const { error } = await supabase.from('announcements').insert({
+    id,
+    tenant_id: tenantId,
+    author: authorId,
+    title: d.title.trim(),
+    body: d.body.trim(),
+    importance: d.importance,
+    scope_type: d.scopeType,
+  })
   if (error) throw error
 
   try {
-    await insertTargets(created.id, d.scopeType, d.storeIds, d.kindIds)
+    await insertTargets(id, d.scopeType, d.storeIds, d.kindIds)
   } catch (e) {
     // 宛先なしの投稿を残さない（本体は論理削除。失敗しても元エラーを優先）
     await supabase
       .from('announcements')
       .update({ deleted_at: new Date().toISOString(), deleted_by: authorId })
-      .eq('id', created.id)
+      .eq('id', id)
     throw e
   }
 }
