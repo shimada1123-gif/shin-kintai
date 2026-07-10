@@ -682,6 +682,7 @@ export type Database = {
           end_min: number
           id: string
           note: string | null
+          notified_at: string | null
           position_id: string | null
           staff_id: string
           start_min: number
@@ -697,6 +698,7 @@ export type Database = {
           end_min: number
           id?: string
           note?: string | null
+          notified_at?: string | null
           position_id?: string | null
           staff_id: string
           start_min: number
@@ -712,6 +714,7 @@ export type Database = {
           end_min?: number
           id?: string
           note?: string | null
+          notified_at?: string | null
           position_id?: string | null
           staff_id?: string
           start_min?: number

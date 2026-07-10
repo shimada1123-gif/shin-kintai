@@ -4021,3 +4021,12 @@ h3,
 .decline-row {
   color: var(--ink);
 }
+
+/* 確定シフトの通知パネル（0017・確定と通知の分離） */
+.notify-panel {
+  border: 1px dashed var(--indigo);
+  background: #eef1f8;
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}

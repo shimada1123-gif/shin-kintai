@@ -62,8 +62,9 @@ function dateLabel(ymd: string): { md: string; full: string } {
   return { md: `${m}月${day}日`, full: `${m}月${day}日（${wd}）` }
 }
 
-/** shift_edit ∧ 対象店（app_can_store のミラー）。settings.ts / announce-mail.ts の手書きチェックに倣う */
-async function assertShiftEditForStore(
+/** shift_edit ∧ 対象店（app_can_store のミラー）。settings.ts / announce-mail.ts の手書きチェックに倣う。
+ *  shift-notify.ts からも再利用するため export */
+export async function assertShiftEditForStore(
   admin: AdminClient,
   caller: Caller,
   storeId: string,

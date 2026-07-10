@@ -512,3 +512,24 @@ export const hhmmToMin = (v: string): number | null => {
   if (!Number.isFinite(h) || !Number.isFinite(m)) return null
   return h * 60 + m
 }
+
+/* ---------- 確定と通知の分離（0017 notified_at・サーバ関数ラッパー） ---------- */
+
+import {
+  previewShiftNotify as previewShiftNotifySrv,
+  sendShiftNotify as sendShiftNotifySrv,
+  type PreviewShiftNotifyResult,
+  type SendShiftNotifyResult,
+} from '@/lib/server/shift-notify'
+
+export type { PreviewShiftNotifyResult, SendShiftNotifyResult }
+
+/** 未通知の確定シフト（全期間）のスタッフ別プレビュー（送らない） */
+export async function getShiftNotifyPreview(storeId: string): Promise<PreviewShiftNotifyResult> {
+  return previewShiftNotifySrv({ data: { store_id: storeId } })
+}
+
+/** 未通知の確定シフトを1人1通で通知メール送信（成功分に notified_at スタンプ） */
+export async function sendShiftNotifications(storeId: string): Promise<SendShiftNotifyResult> {
+  return sendShiftNotifySrv({ data: { store_id: storeId } })
+}
