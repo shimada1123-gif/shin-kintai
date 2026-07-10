@@ -4,19 +4,25 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { errText } from '@/lib/errors'
 import { useMe } from '@/lib/me-context'
 import { usePermissions } from '@/lib/perm'
-import { fetchStaffList } from '@/lib/queries/master'
+import { fetchEmploymentKinds, fetchPositions, fetchStaffList } from '@/lib/queries/master'
 import {
   availErrText,
+  DAY_TYPES,
   deleteAvailability,
   fetchHolidays,
   fetchMyAvailability,
   fetchMyStores,
+  fetchRequirements,
   fetchStoreAvailability,
   hhmmToMin,
   minToHHMM,
+  reqErrText,
   upsertAvailability,
+  upsertRequirement,
   type AvailKind,
   type AvailRow,
+  type DayType,
+  type RequirementRow,
 } from '@/lib/queries/shifts'
 import { ymd } from '@/lib/worktime'
 
@@ -64,7 +70,7 @@ function ShiftsPage() {
 
   const canEdit = perms.has('shift_edit')
   const hasSelf = !!me?.staffId
-  const [tab, setTab] = useState<'matrix' | 'mine'>('mine')
+  const [tab, setTab] = useState<'matrix' | 'req' | 'mine'>('mine')
 
   // 権限が確定したら初期タブを決める（管理者はマトリクスが主）
   useEffect(() => {
@@ -98,18 +104,31 @@ function ShiftsPage() {
         </span>
       </div>
 
-      {canEdit && hasSelf && (
+      {canEdit && (
         <div className="tab-row">
           <button className={`tab${tab === 'matrix' ? ' on' : ''}`} onClick={() => setTab('matrix')}>
             希望一覧（全員）
           </button>
-          <button className={`tab${tab === 'mine' ? ' on' : ''}`} onClick={() => setTab('mine')}>
-            自分の希望
+          <button className={`tab${tab === 'req' ? ' on' : ''}`} onClick={() => setTab('req')}>
+            必要人数
           </button>
+          {hasSelf && (
+            <button className={`tab${tab === 'mine' ? ' on' : ''}`} onClick={() => setTab('mine')}>
+              自分の希望
+            </button>
+          )}
         </div>
       )}
 
-      {tab === 'matrix' && canEdit ? <MatrixView /> : hasSelf ? <MyAvailabilityView /> : <MatrixView />}
+      {tab === 'req' && canEdit ? (
+        <RequirementsView />
+      ) : tab === 'matrix' && canEdit ? (
+        <MatrixView />
+      ) : hasSelf ? (
+        <MyAvailabilityView />
+      ) : (
+        <MatrixView />
+      )}
     </section>
   )
 }
@@ -647,5 +666,257 @@ function MatrixView() {
         />
       )}
     </>
+  )
+}
+
+/* -------------------------- 管理者: 必要人数の定義 -------------------------- */
+
+function Stepper({
+  value,
+  min = 0,
+  onChange,
+  label,
+}: {
+  value: number
+  min?: number
+  onChange: (v: number) => void
+  label?: string
+}) {
+  return (
+    <span className="stp" aria-label={label}>
+      <button type="button" onClick={() => onChange(Math.max(min, value - 1))}>
+        −
+      </button>
+      <b className="mono">{value}</b>
+      <button type="button" onClick={() => onChange(value + 1)}>
+        ＋
+      </button>
+    </span>
+  )
+}
+
+function RequirementsView() {
+  const { me } = useMe()
+  const [storeId, setStoreId] = useState('')
+
+  useEffect(() => {
+    if (!storeId && me?.stores.length) setStoreId(me.stores[0].id)
+  }, [me?.stores, storeId])
+
+  const reqQ = useQuery({
+    queryKey: ['shift_req', storeId],
+    enabled: !!storeId,
+    queryFn: () => fetchRequirements(storeId),
+  })
+
+  const kindsQ = useQuery({ queryKey: ['master', 'kinds'], queryFn: fetchEmploymentKinds })
+  const posQ = useQuery({ queryKey: ['master', 'positions'], queryFn: fetchPositions })
+
+  if (!me) return null
+
+  // 打刻対象の区分のみ（業務委託などはシフト最低人数の対象外にしない方が自然だが、
+  // まずは requires_clock=true の主要区分を出す）
+  const kindLabels = (kindsQ.data ?? []).filter((k) => k.requires_clock).map((k) => k.label)
+
+  // B案の主軸: この店舗のポジション（全店共通 + 店舗専用）
+  const positionNames = (posQ.data ?? [])
+    .filter((p) => p.store_id === null || p.store_id === storeId)
+    .map((p) => p.name)
+
+  return (
+    <>
+      <div className="filter-row">
+        <label className="field">
+          <span>店舗</span>
+          <select value={storeId} onChange={(e) => setStoreId(e.target.value)}>
+            {me.stores.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      {reqQ.error && (
+        <p className="login-error" role="alert">
+          {reqErrText(reqQ.error)}
+        </p>
+      )}
+      {reqQ.isPending && !!storeId && <p className="note">読み込み中…</p>}
+
+      {positionNames.length === 0 && !posQ.isPending && (
+        <p className="perm-banner" role="status">
+          ポジションが未登録です。スタッフ・店舗ページでポジション（キッチン/フロア等）を
+          登録すると、ポジション別に必要人数を組めます。それまでは全体人数のみの入力になります。
+        </p>
+      )}
+
+      {reqQ.data &&
+        DAY_TYPES.map((dt) => (
+          <RequirementRowEditor
+            key={`${storeId}|${dt.key}`}
+            storeId={storeId}
+            dayType={dt.key}
+            dayLabel={dt.label}
+            badgeCls={dt.badgeCls}
+            kindLabels={kindLabels}
+            positionNames={positionNames}
+            initial={reqQ.data.find((r) => r.day_type === dt.key) ?? null}
+          />
+        ))}
+
+      <p className="note">
+        <b>ポジション別</b>が主軸です（キッチン2・フロア2 → 合計は自動計算して保存）。
+        <b>区分別最低</b>＝「社員≥1」のような補助の下限（合計が必要人数を超えると警告が
+        出ますが保存はできます）。曜日区分ごとに保存してください。シフト表の作成
+        （段階2-b）でこのテンプレートと希望を突き合わせます。
+      </p>
+    </>
+  )
+}
+
+function RequirementRowEditor({
+  storeId,
+  dayType,
+  dayLabel,
+  badgeCls,
+  kindLabels,
+  positionNames,
+  initial,
+}: {
+  storeId: string
+  dayType: DayType
+  dayLabel: string
+  badgeCls: string
+  kindLabels: string[]
+  positionNames: string[]
+  initial: RequirementRow | null
+}) {
+  const { me } = useMe()
+  const qc = useQueryClient()
+  const hasPositions = positionNames.length > 0
+  // B案: ポジションがあれば need はポジション合計の自動計算。無い店では手動。
+  const [manualNeed, setManualNeed] = useState(initial?.need_count ?? 0)
+  const [needByPos, setNeedByPos] = useState<Record<string, number>>(
+    initial?.need_by_position ?? {},
+  )
+  const [minByKind, setMinByKind] = useState<Record<string, number>>(initial?.min_by_kind ?? {})
+  const [memo, setMemo] = useState(initial?.memo ?? '')
+  const [msg, setMsg] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const posSum = Object.values(needByPos).reduce((s, v) => s + (v > 0 ? v : 0), 0)
+  const need = hasPositions ? posSum : manualNeed
+
+  const save = useMutation({
+    mutationFn: () =>
+      upsertRequirement({
+        tenantId: me!.tenantId,
+        storeId,
+        dayType,
+        needCount: need,
+        needByPosition: hasPositions ? needByPos : {},
+        minByKind,
+        memo: memo.trim() || null,
+      }),
+    onSuccess: () => {
+      setMsg('保存しました ✓')
+      void qc.invalidateQueries({ queryKey: ['shift_req', storeId] })
+    },
+    onError: (e) => setError(reqErrText(e)),
+  })
+
+  const minSum = Object.values(minByKind).reduce((s, v) => s + (v > 0 ? v : 0), 0)
+  const over = minSum > need
+
+  const posSummary = Object.entries(needByPos)
+    .filter(([, v]) => v > 0)
+    .map(([k, v]) => `${k}${v}`)
+    .join('・')
+  const kindSummary = Object.entries(minByKind)
+    .filter(([, v]) => v > 0)
+    .map(([k, v]) => `${k}≥${v}`)
+    .join('・')
+  const summary =
+    [posSummary, kindSummary].filter(Boolean).join(' ／ ') || '条件なし'
+
+  return (
+    <div className="card req-row">
+      <div className="req-head">
+        <span className={`dtype-badge ${badgeCls}`}>{dayLabel}</span>
+        <div className="req-need">
+          <span className="req-lab">必要人数{hasPositions ? '（自動集計）' : ''}</span>
+          {hasPositions ? (
+            <b className="mono req-total">{need}</b>
+          ) : (
+            <Stepper value={manualNeed} onChange={setManualNeed} label={`${dayLabel}の必要人数`} />
+          )}
+        </div>
+        <button
+          className="btn sm pri req-save"
+          disabled={save.isPending}
+          onClick={() => {
+            setMsg(null)
+            setError(null)
+            save.mutate()
+          }}
+        >
+          {save.isPending ? '保存中…' : '保存'}
+        </button>
+      </div>
+
+      {hasPositions && (
+        <div className="condrow pos-row">
+          <span className="req-lab">ポジション別</span>
+          {positionNames.map((name) => (
+            <span key={name} className="mm pp">
+              {name}
+              <Stepper
+                value={needByPos[name] ?? 0}
+                onChange={(v) => setNeedByPos({ ...needByPos, [name]: v })}
+                label={`${name}の必要人数`}
+              />
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div className="condrow">
+        <span className="req-lab">区分別最低</span>
+        {kindLabels.map((label) => (
+          <span key={label} className="mm">
+            {label}
+            <Stepper
+              value={minByKind[label] ?? 0}
+              onChange={(v) => setMinByKind({ ...minByKind, [label]: v })}
+              label={`${label}の最低人数`}
+            />
+          </span>
+        ))}
+        <input
+          className="ri req-memo"
+          value={memo}
+          placeholder="メモ（任意）例）宴会シーズンは+1"
+          onChange={(e) => setMemo(e.target.value)}
+        />
+      </div>
+
+      <div className="condsum note">
+        → {summary}
+        {over && (
+          <span className="req-warn">
+            ⚠ 区分別最低の合計（{minSum}人）が必要人数（{need}人）を超えています
+          </span>
+        )}
+        {msg && <span className="req-ok">{msg}</span>}
+      </div>
+
+      {error && (
+        <p className="login-error" role="alert">
+          {error}
+        </p>
+      )}
+    </div>
   )
 }

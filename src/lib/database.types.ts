@@ -638,6 +638,7 @@ export type Database = {
           id: string
           memo: string | null
           min_by_kind: Json
+          need_by_position: Json
           need_count: number
           store_id: string
           tenant_id: string
@@ -648,6 +649,7 @@ export type Database = {
           id?: string
           memo?: string | null
           min_by_kind?: Json
+          need_by_position?: Json
           need_count?: number
           store_id: string
           tenant_id: string
@@ -658,6 +660,7 @@ export type Database = {
           id?: string
           memo?: string | null
           min_by_kind?: Json
+          need_by_position?: Json
           need_count?: number
           store_id?: string
           tenant_id?: string

@@ -180,6 +180,93 @@ export async function fetchHolidays(fromDay: string, toDay: string): Promise<Map
   return new Map((data ?? []).map((h) => [h.holiday_date, h.name]))
 }
 
+/* --------------------------- 必要人数（要件定義） --------------------------- */
+
+export type DayType = 'weekday' | 'fri' | 'sat' | 'sun' | 'holiday'
+
+export const DAY_TYPES: { key: DayType; label: string; badgeCls: string }[] = [
+  { key: 'weekday', label: '平日', badgeCls: 'dt-w' },
+  { key: 'fri', label: '金曜', badgeCls: 'dt-fri' },
+  { key: 'sat', label: '土曜', badgeCls: 'dt-sat' },
+  { key: 'sun', label: '日曜', badgeCls: 'dt-sun' },
+  { key: 'holiday', label: '祝日', badgeCls: 'dt-hol' },
+]
+
+export interface RequirementRow {
+  day_type: DayType
+  need_count: number
+  /** ポジション名 → 必要人数（B案の主軸。例 {"キッチン":2,"フロア":2}） */
+  need_by_position: Record<string, number>
+  /** 雇用区分ラベル → 最低人数（補助制約。例 {"社員":1,"パート":1}） */
+  min_by_kind: Record<string, number>
+  memo: string | null
+}
+
+export async function fetchRequirements(storeId: string): Promise<RequirementRow[]> {
+  const supabase = await getSupabase()
+  const { data, error } = await supabase
+    .from('shift_requirements')
+    .select('day_type, need_count, need_by_position, min_by_kind, memo')
+    .eq('store_id', storeId)
+  if (error) throw error
+  return (data ?? []).map((r) => ({
+    day_type: r.day_type as DayType,
+    need_count: r.need_count,
+    need_by_position: (r.need_by_position ?? {}) as Record<string, number>,
+    min_by_kind: (r.min_by_kind ?? {}) as Record<string, number>,
+    memo: r.memo,
+  }))
+}
+
+/** 0以下・非数を除いて整数化（jsonb を汚さない） */
+function cleanCounts(src: Record<string, number>): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const [k, v] of Object.entries(src)) {
+    if (Number.isFinite(v) && v > 0) out[k] = Math.trunc(v)
+  }
+  return out
+}
+
+export interface UpsertRequirementArgs {
+  tenantId: string
+  storeId: string
+  dayType: DayType
+  /** ポジションが定義されている店では need_by_position の合計を渡す運用（B案） */
+  needCount: number
+  needByPosition: Record<string, number>
+  minByKind: Record<string, number>
+  memo: string | null
+}
+
+/** 保存は upsert（unique(store_id, day_type)）。防壁は req_write = shift_edit ∧ 自店。 */
+export async function upsertRequirement(a: UpsertRequirementArgs): Promise<void> {
+  const supabase = await getSupabase()
+  const { error } = await supabase.from('shift_requirements').upsert(
+    {
+      tenant_id: a.tenantId,
+      store_id: a.storeId,
+      day_type: a.dayType,
+      need_count: Math.max(0, Math.trunc(a.needCount)),
+      need_by_position: cleanCounts(a.needByPosition),
+      min_by_kind: cleanCounts(a.minByKind),
+      memo: a.memo,
+    },
+    { onConflict: 'store_id,day_type' },
+  )
+  if (error) throw error
+}
+
+/** 要件保存のRLS違反を具体的な日本語に */
+export function reqErrText(e: unknown): string {
+  if (e instanceof Error) {
+    const code = 'code' in e ? (e as { code?: string }).code : undefined
+    if (code === '42501' || /row-level security/i.test(e.message)) {
+      return '必要人数を保存できません。シフト編集権限（shift_edit）と、自分のスコープ内の店舗であることが必要です。'
+    }
+  }
+  return errText(e, '必要人数を保存できませんでした')
+}
+
 /* ------------------------------ 時刻ヘルパー ------------------------------ */
 
 export const minToHHMM = (min: number | null): string => {
