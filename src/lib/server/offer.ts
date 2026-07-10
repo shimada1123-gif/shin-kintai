@@ -14,8 +14,11 @@ let _anon: SupabaseClient<Database> | undefined
 
 function getAnonClient(): SupabaseClient<Database> {
   if (_anon) return _anon
-  const url = process.env.SUPABASE_URL ?? import.meta.env.VITE_SUPABASE_URL
-  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+  // import.meta.env はビルド時静的展開が正常系。.env なし環境でビルドされた場合の保険として
+  // Worker バインディング（wrangler.jsonc vars → process.env）へ実行時フォールバックする
+  const url =
+    process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? import.meta.env.VITE_SUPABASE_URL
+  const anonKey = process.env.VITE_SUPABASE_ANON_KEY ?? import.meta.env.VITE_SUPABASE_ANON_KEY
   if (!url || !anonKey) throw new Error('Supabase の接続設定が見つかりません。')
   _anon = createClient<Database>(url, anonKey, {
     auth: { persistSession: false, autoRefreshToken: false },

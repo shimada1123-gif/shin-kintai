@@ -79,28 +79,32 @@ const MISSING: OfferOutcome = {
 }
 
 export function OfferLanding({ action, token }: { action: OfferAction; token: string | undefined }) {
+  // 初回レンダーの token を固定保持する。history.replaceState で URL の ?t= を消すと
+  // TanStack Router の search 再評価で props の token が undefined 化するため、
+  // マウント後に押される承諾ボタンは props ではなくこちらを使う（useState 初期値は不変）
+  const [heldToken] = useState(token)
   const [phase, setPhase] = useState<Phase>(
-    action === 'accept' && token ? { kind: 'form' } : { kind: 'loading' },
+    action === 'accept' && heldToken ? { kind: 'form' } : { kind: 'loading' },
   )
   const [comment, setComment] = useState('')
   const fired = useRef(false)
 
   const run = (act: OfferAction, cmt?: string) => {
     setPhase({ kind: 'loading' })
-    respondOffer({ data: { action: act, token: token!, comment: cmt } })
+    respondOffer({ data: { action: act, token: heldToken!, comment: cmt } })
       .then((outcome) => setPhase({ kind: 'done', did: act, outcome }))
       .catch(() => setPhase({ kind: 'error' }))
   }
 
   useEffect(() => {
-    // 生トークンを URL から除去（rpc 用の値は props で確保済みなので先に消して安全）
+    // 生トークンを URL から除去（値は heldToken に退避済みなので消して安全）
     if (window.location.search) {
       window.history.replaceState(null, '', window.location.pathname)
     }
     if (fired.current) return
     fired.current = true
 
-    if (!token) {
+    if (!heldToken) {
       setPhase({ kind: 'done', did: action, outcome: MISSING })
       return
     }
