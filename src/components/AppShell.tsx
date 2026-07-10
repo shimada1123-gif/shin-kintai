@@ -12,7 +12,7 @@ const NAV: NavItem[] = [
   { to: '/', label: 'ダッシュボード', roles: ['owner', 'area_manager', 'store_manager', 'staff'] },
   { to: '/punch', label: '打刻', roles: ['owner', 'area_manager', 'store_manager', 'staff'] },
   { to: '/attendance', label: '勤怠', roles: ['owner', 'area_manager', 'store_manager', 'staff'] },
-  { to: '/shifts', label: 'シフト', roles: ['owner', 'area_manager', 'store_manager'] },
+  { to: '/shifts', label: 'シフト', roles: ['owner', 'area_manager', 'store_manager', 'staff'] },
   { to: '/staff', label: 'スタッフ', roles: ['owner', 'area_manager', 'store_manager'] },
   { to: '/reports', label: 'レポート', roles: ['owner', 'area_manager'] },
   { to: '/users', label: 'ユーザー管理', roles: ['owner', 'area_manager', 'store_manager'] },
