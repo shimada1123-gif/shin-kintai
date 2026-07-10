@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "deploy": "npm run typecheck && npm run build && wrangler deploy",
-    "types:gen": "supabase gen types typescript --linked > src/lib/database.types.ts"
+    "types:gen": "npx supabase gen types typescript --linked > src/lib/database.types.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.3",
