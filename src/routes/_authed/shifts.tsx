@@ -15,11 +15,13 @@ import {
   fetchAssignments,
   fetchHolidays,
   fetchMyAvailability,
+  fetchMyShifts,
   fetchMyStores,
   fetchRequirements,
   fetchStoreAvailability,
   hhmmToMin,
   minToHHMM,
+  publishWeek,
   reqErrText,
   updateAssignment,
   upsertAvailability,
@@ -76,7 +78,7 @@ function ShiftsPage() {
 
   const canEdit = perms.has('shift_edit')
   const hasSelf = !!me?.staffId
-  const [tab, setTab] = useState<'matrix' | 'build' | 'req' | 'mine'>('mine')
+  const [tab, setTab] = useState<'matrix' | 'build' | 'req' | 'mine' | 'myshift'>('mine')
 
   // 権限が確定したら初期タブを決める（管理者はマトリクスが主）
   useEffect(() => {
@@ -107,12 +109,12 @@ function ShiftsPage() {
         <h1>シフト</h1>
         <span className="desc">
           {canEdit
-            ? '希望の収集 → 必要人数 → 週ビューで配置（下書き）。公開は次の段階です。'
-            : '○△×で希望を出します。'}
+            ? '希望の収集 → 必要人数 → 週ビューで配置 → 確定・公開。'
+            : '○△×で希望を出し、公開されたシフトはマイシフトで確認できます。'}
         </span>
       </div>
 
-      {canEdit && (
+      {canEdit ? (
         <div className="tab-row">
           <button className={`tab${tab === 'matrix' ? ' on' : ''}`} onClick={() => setTab('matrix')}>
             希望一覧（全員）
@@ -124,14 +126,38 @@ function ShiftsPage() {
             必要人数
           </button>
           {hasSelf && (
-            <button className={`tab${tab === 'mine' ? ' on' : ''}`} onClick={() => setTab('mine')}>
-              自分の希望
-            </button>
+            <>
+              <button className={`tab${tab === 'mine' ? ' on' : ''}`} onClick={() => setTab('mine')}>
+                自分の希望
+              </button>
+              <button
+                className={`tab${tab === 'myshift' ? ' on' : ''}`}
+                onClick={() => setTab('myshift')}
+              >
+                マイシフト
+              </button>
+            </>
           )}
         </div>
+      ) : (
+        hasSelf && (
+          <div className="tab-row">
+            <button className={`tab${tab === 'mine' ? ' on' : ''}`} onClick={() => setTab('mine')}>
+              希望を出す
+            </button>
+            <button
+              className={`tab${tab === 'myshift' ? ' on' : ''}`}
+              onClick={() => setTab('myshift')}
+            >
+              マイシフト
+            </button>
+          </div>
+        )
       )}
 
-      {tab === 'build' && canEdit ? (
+      {tab === 'myshift' && hasSelf ? (
+        <MyShiftView />
+      ) : tab === 'build' && canEdit ? (
         <BuildView />
       ) : tab === 'req' && canEdit ? (
         <RequirementsView />
@@ -972,14 +998,26 @@ function dayTypeOf(dow: number, isHoliday: boolean): DayType {
 
 function BuildView() {
   const { me } = useMe()
+  const qc = useQueryClient()
   const [storeId, setStoreId] = useState('')
   const [weekBase, setWeekBase] = useState(() => new Date())
+  const [pubMsg, setPubMsg] = useState<string | null>(null)
+  const [pubErr, setPubErr] = useState<string | null>(null)
   const [editing, setEditing] = useState<
     | { mode: 'create'; date: string; staffId: string; staffName: string; avail: AvailRow | null }
     | { mode: 'edit'; asg: ShiftAsg }
     | null
   >(null)
   const week = useMemo(() => weekMeta(weekBase), [weekBase])
+
+  const publish = useMutation({
+    mutationFn: () => publishWeek(storeId, week.from, week.to),
+    onSuccess: (n) => {
+      setPubMsg(`${n} 件のシフトを確定・公開しました ✓`)
+      void qc.invalidateQueries({ queryKey: ['shift_asg'] })
+    },
+    onError: (e) => setPubErr(asgErrText(e)),
+  })
 
   useEffect(() => {
     if (!storeId && me?.stores.length) setStoreId(me.stores[0].id)
@@ -1013,6 +1051,9 @@ function BuildView() {
     id ? (positions.find((p) => p.id === id)?.name ?? 'ポジション') : null
   const reqByType = new Map((reqQ.data ?? []).map((r) => [r.day_type, r]))
   const holidays = holidaysQ.data ?? new Map<string, string>()
+
+  const draftCount = (asgQ.data ?? []).filter((a) => a.status === 'draft').length
+  const pubCount = (asgQ.data ?? []).filter((a) => a.status === 'published').length
 
   return (
     <>
@@ -1048,6 +1089,38 @@ function BuildView() {
             ))}
           </select>
         </label>
+      </div>
+
+      <div className="publish-row">
+        {draftCount > 0 && (
+          <button
+            className="btn-dl publish-btn"
+            disabled={publish.isPending}
+            onClick={() => {
+              setPubMsg(null)
+              setPubErr(null)
+              if (
+                confirm(
+                  `${week.label} のシフトを確定して公開しますか？\n公開後はスタッフのマイシフトに表示されます（スタッフは直接編集できません）。`,
+                )
+              ) {
+                publish.mutate()
+              }
+            }}
+          >
+            {publish.isPending ? '公開中…' : `この週を確定・公開（下書き ${draftCount} 件）`}
+          </button>
+        )}
+        {draftCount === 0 && pubCount > 0 && <span className="pub-badge">公開済み</span>}
+        {draftCount > 0 && pubCount > 0 && (
+          <span className="note">公開済み {pubCount} 件 / 下書き {draftCount} 件</span>
+        )}
+        {pubMsg && <span className="req-ok">{pubMsg}</span>}
+        {pubErr && (
+          <span className="login-error" role="alert">
+            {pubErr}
+          </span>
+        )}
       </div>
 
       {(asgQ.error || availQ.error) && (
@@ -1114,6 +1187,7 @@ function BuildView() {
                     onClick={() => setEditing({ mode: 'edit', asg: a })}
                   >
                     <b>{a.staff_name}</b>
+                    {a.status === 'draft' && <span className="draft-mark">下書き</span>}
                     {a.weight_half && <span className="half-mark">0.5</span>}
                     <span className="mono asg-time">
                       {minToHHMM(a.start_min)}-{minToHHMM(a.end_min)}
@@ -1324,5 +1398,100 @@ function AsgEditorModal({
         </div>
       </div>
     </div>
+  )
+}
+
+/* ------------------------------ マイシフト（本人） ------------------------------ */
+
+function MyShiftView() {
+  const { me } = useMe()
+  const staffId = me?.staffId
+
+  const today = ymd(new Date())
+  const until = useMemo(() => {
+    const d = new Date()
+    return ymd(new Date(d.getFullYear(), d.getMonth(), d.getDate() + 30))
+  }, [])
+
+  const q = useQuery({
+    queryKey: ['my_shifts', staffId, today],
+    enabled: !!staffId,
+    queryFn: () => fetchMyShifts(staffId!, today, until),
+  })
+
+  if (!staffId) {
+    return <p className="note">スタッフ情報が紐付いていないため、マイシフトはありません。</p>
+  }
+
+  const todays = (q.data ?? []).filter((s) => s.work_date === today)
+  const upcoming = (q.data ?? []).filter((s) => s.work_date !== today)
+
+  const dateLabel = (d: string) =>
+    new Date(`${d}T00:00:00`).toLocaleDateString('ja-JP', {
+      month: '2-digit',
+      day: '2-digit',
+      weekday: 'short',
+    })
+
+  return (
+    <>
+      <div className="card myshift-today">
+        <div className="k">今日のシフト（{dateLabel(today)}）</div>
+        {q.isPending && <p className="note">読み込み中…</p>}
+        {!q.isPending && todays.length === 0 && (
+          <p className="note">今日の公開シフトはありません。</p>
+        )}
+        {todays.map((s) => (
+          <div key={s.id} className="today-shift">
+            <span className="mono today-shift-time">
+              {minToHHMM(s.start_min)} 〜 {minToHHMM(s.end_min)}
+            </span>
+            <span className="today-shift-meta">
+              {s.store_name}
+              {s.position_name && <span className="asg-pos">{s.position_name}</span>}
+            </span>
+            {s.note && <span className="note">{s.note}</span>}
+          </div>
+        ))}
+      </div>
+
+      <div className="sec-h">
+        <h3>今後のシフト（30日以内・公開分のみ）</h3>
+        <span className="rule" />
+        <span className="cnt mono">{upcoming.length}</span>
+      </div>
+
+      {q.error && (
+        <p className="login-error" role="alert">
+          {errText(q.error, 'シフトを取得できませんでした')}
+        </p>
+      )}
+
+      {!q.isPending && upcoming.length === 0 && (
+        <p className="note">
+          公開されたシフトはまだありません。公開されるとここに表示されます。
+        </p>
+      )}
+
+      {upcoming.length > 0 && (
+        <ul className="myshift-list">
+          {upcoming.map((s) => (
+            <li key={s.id} className="myshift-item">
+              <span className="mono small myshift-date">{dateLabel(s.work_date)}</span>
+              <span className="mono myshift-time">
+                {minToHHMM(s.start_min)}-{minToHHMM(s.end_min)}
+              </span>
+              <span className="note">{s.store_name}</span>
+              {s.position_name && <span className="asg-pos">{s.position_name}</span>}
+              {s.note && <span className="note">{s.note}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <p className="note">
+        シフトの変更が必要なときは店舗の管理者に相談してください（マイシフトからは変更できません）。
+      </p>
+    </>
   )
 }

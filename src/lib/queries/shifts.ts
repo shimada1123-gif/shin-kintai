@@ -395,6 +395,69 @@ export async function deleteAssignment(id: string): Promise<void> {
   if (error) throw error
 }
 
+/**
+ * 週の確定・公開: その店舗×期間の draft を published に一括更新。
+ * published を draft に戻す経路は用意しない（要件）。
+ * 防壁は sa2_write（shift_edit ∧ 自店）。スタッフには write ポリシー自体が無い。
+ */
+export async function publishWeek(
+  storeId: string,
+  fromDay: string,
+  toDay: string,
+): Promise<number> {
+  const supabase = await getSupabase()
+  const { data, error } = await supabase
+    .from('shift_assignments')
+    .update({ status: 'published', updated_at: new Date().toISOString() })
+    .eq('store_id', storeId)
+    .eq('status', 'draft')
+    .gte('work_date', fromDay)
+    .lte('work_date', toDay)
+    .select('id')
+  if (error) throw error
+  return (data ?? []).length
+}
+
+/* ---------------------------- マイシフト（本人） ---------------------------- */
+
+export interface MyShift {
+  id: string
+  work_date: string
+  start_min: number
+  end_min: number
+  note: string | null
+  store_name: string
+  position_name: string | null
+}
+
+/** 自分の公開済みシフトのみ（draft は本人に見せない）。日付順。 */
+export async function fetchMyShifts(
+  staffId: string,
+  fromDay: string,
+  toDay: string,
+): Promise<MyShift[]> {
+  const supabase = await getSupabase()
+  const { data, error } = await supabase
+    .from('shift_assignments')
+    .select('id, work_date, start_min, end_min, note, stores (name), positions (name)')
+    .eq('staff_id', staffId)
+    .eq('status', 'published')
+    .gte('work_date', fromDay)
+    .lte('work_date', toDay)
+    .order('work_date')
+    .order('start_min')
+  if (error) throw error
+  return (data ?? []).map((r) => ({
+    id: r.id,
+    work_date: r.work_date,
+    start_min: r.start_min,
+    end_min: r.end_min,
+    note: r.note,
+    store_name: (r.stores as { name: string } | null)?.name ?? '所属店舗',
+    position_name: (r.positions as { name: string } | null)?.name ?? null,
+  }))
+}
+
 /** 確定シフト操作のRLS違反を具体的な日本語に */
 export function asgErrText(e: unknown): string {
   if (e instanceof Error) {
