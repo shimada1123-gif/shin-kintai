@@ -144,7 +144,8 @@ function BoardPage() {
         )}
       </div>
 
-      {error && (
+      {/* 詳細モーダルを開いている間はモーダル内に出す（背後に隠れて見えないため） */}
+      {error && !detail && (
         <p className="login-error" role="alert">
           {error}
         </p>
@@ -200,6 +201,7 @@ function BoardPage() {
           kinds={kinds}
           canManage={canManage(detail)}
           deleting={delMut.isPending}
+          deleteError={error}
           onEdit={() => {
             setEditing(detail)
             setDetail(null)
@@ -240,6 +242,7 @@ function DetailModal({
   kinds,
   canManage,
   deleting,
+  deleteError,
   onEdit,
   onDelete,
   onClose,
@@ -249,6 +252,7 @@ function DetailModal({
   kinds: EmploymentKind[]
   canManage: boolean
   deleting: boolean
+  deleteError: string | null
   onEdit: () => void
   onDelete: () => void
   onClose: () => void
@@ -283,6 +287,12 @@ function DetailModal({
                 }`
               : 'メール配信はまだ行われていません。'}
           </div>
+        )}
+
+        {deleteError && (
+          <p className="login-error" role="alert">
+            {deleteError}
+          </p>
         )}
 
         <div className="mbtns">
