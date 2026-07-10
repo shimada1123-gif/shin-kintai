@@ -1,4 +1,5 @@
 import { getSupabase } from '@/lib/auth/supabase-client'
+import { confirmOffer } from '@/lib/server/offer-create'
 
 /**
  * オファー（shift_offers / shift_offer_recipients）の閲覧・確定・取消。
@@ -87,15 +88,12 @@ export interface ConfirmOutcome {
   overlapWarning: boolean
 }
 
-/** 管理者の確定。definer 関数を rpc 直呼び（排他・権限チェックは関数内） */
+/**
+ * 管理者の確定。フェーズ5-1でサーバ関数（confirmOffer）経由に一本化：
+ * サーバ側でスナップショット→rpc（呼び出し者JWT）→確定/落選メール送信まで行う。
+ * 戻り値の ok/reason/overlapWarning は従来と同形（UI の結果マッピングはそのまま）。
+ */
 export async function confirmOfferRecipient(recipientId: string): Promise<ConfirmOutcome> {
-  const supabase = await getSupabase()
-  const { data, error } = await supabase.rpc('app_offer_confirm', { p_recipient_id: recipientId })
-  if (error) throw error
-  const r = (data ?? {}) as { ok?: boolean; reason?: string; overlap_warning?: boolean }
-  return {
-    ok: r.ok === true,
-    reason: r.reason ?? null,
-    overlapWarning: r.overlap_warning === true,
-  }
+  const r = await confirmOffer({ data: { recipient_id: recipientId } })
+  return { ok: r.ok, reason: r.reason, overlapWarning: r.overlapWarning }
 }

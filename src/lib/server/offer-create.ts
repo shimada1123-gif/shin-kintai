@@ -1,4 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
+import { getRequestHeader } from '@tanstack/react-start/server'
+import { createClient } from '@supabase/supabase-js'
+import type { Database } from '@/lib/database.types'
 import { getAdminClient, type AdminClient } from '@/lib/supabase-admin.server'
 import { sendMail } from '@/lib/resend.server'
 import { requireCaller } from './caller'
@@ -302,4 +305,157 @@ export const createOffers = createServerFn({ method: 'POST' })
     }
 
     return result
+  })
+
+/* -------------------- フェーズ5-1: 確定（サーバ化＋確定/落選メール） -------------------- */
+
+export interface ConfirmOfferResult {
+  ok: boolean
+  reason: string | null
+  overlapWarning: boolean
+  /** 勝者への確定メールが送れたか（アドレス未登録・送信失敗は false） */
+  confirmed_mail_ok: boolean
+  /** 落選者へ送れた「埋まりました」メールの件数 */
+  superseded_mail_sent: number
+}
+
+/**
+ * 管理者の確定をサーバ関数化。app_offer_confirm(0014) は勝者しか返さないため、
+ * rpc 実行「直前」に applied/pending の recipients をスナップショットし、
+ * 成功後に「勝者以外」を落選通知の宛先にする（押し出された集合と厳密一致）。
+ * メール失敗は throw せず件数に積むだけ（確定は成立済み＝ロールバックしない）。
+ */
+export const confirmOffer = createServerFn({ method: 'POST' })
+  .inputValidator((d: { recipient_id: string }) => {
+    assert(typeof d.recipient_id === 'string' && d.recipient_id, '対象が指定されていません。')
+    return d
+  })
+  .handler(async ({ data }): Promise<ConfirmOfferResult> => {
+    const caller = await requireCaller()
+    const admin = getAdminClient()
+
+    const fail = (reason: string): ConfirmOfferResult => ({
+      ok: false,
+      reason,
+      overlapWarning: false,
+      confirmed_mail_ok: false,
+      superseded_mail_sent: 0,
+    })
+
+    // b. recipient → offer を解決し、権限確認（definer 内チェックと二重）
+    const { data: rec } = await admin
+      .from('shift_offer_recipients')
+      .select('id, offer_id, staff_id, email')
+      .eq('id', data.recipient_id)
+      .maybeSingle()
+    if (!rec) return fail('invalid')
+
+    const { data: off } = await admin
+      .from('shift_offers')
+      .select('id, tenant_id, store_id, work_date, start_min, end_min, position_id')
+      .eq('id', rec.offer_id)
+      .maybeSingle()
+    if (!off || off.tenant_id !== caller.tenantId) return fail('invalid')
+
+    const { storeName } = await assertShiftEditForStore(admin, caller, off.store_id)
+
+    // c. 確定直前スナップショット（applied/pending ＝ 今回の確定で押し出される可能性のある集合）
+    const { data: snapshot, error: snapErr } = await admin
+      .from('shift_offer_recipients')
+      .select('id, staff_id, email')
+      .eq('offer_id', off.id)
+      .in('response', ['applied', 'pending'])
+    assert(!snapErr, '申請状況の取得に失敗しました。')
+
+    // d. rpc は「呼び出し者の JWT ＋ anon キー」で実行する。
+    //    service_role だと definer 内の app_has_perm/app_can_store（auth.uid() ベース）が
+    //    null ユーザー扱いで必ず forbidden になるため、admin 経路では呼ばない
+    const jwt = (getRequestHeader('authorization') ?? '').replace(/^Bearer\s+/i, '')
+    const url =
+      process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? import.meta.env.VITE_SUPABASE_URL
+    const anonKey = process.env.VITE_SUPABASE_ANON_KEY ?? import.meta.env.VITE_SUPABASE_ANON_KEY
+    assert(url && anonKey, 'Supabase の接続設定が見つかりません。')
+    const asCaller = createClient<Database>(url, anonKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { headers: { Authorization: `Bearer ${jwt}` } },
+    })
+
+    const { data: raw, error: rpcErr } = await asCaller.rpc('app_offer_confirm', {
+      p_recipient_id: data.recipient_id,
+    })
+    assert(!rpcErr, '確定処理に失敗しました。時間をおいて再度お試しください。')
+    const r = (raw ?? {}) as {
+      ok?: boolean
+      reason?: string
+      staff_id?: string
+      overlap_warning?: boolean
+    }
+
+    // e. 失敗はそのまま返す（メールは送らない）
+    if (r.ok !== true) return fail(r.reason ?? 'error')
+
+    // f. 確定メール（勝者）＋埋まりましたメール（落選者）
+    const winnerStaffId = r.staff_id ?? rec.staff_id
+    const d2 = dateLabel(off.work_date)
+
+    let positionName: string | null = null
+    if (off.position_id) {
+      const { data: p } = await admin
+        .from('positions')
+        .select('name')
+        .eq('tenant_id', off.tenant_id)
+        .eq('id', off.position_id)
+        .maybeSingle()
+      positionName = p?.name ?? null
+    }
+
+    // 勝者 email: スナップショット優先、null なら staff からテナント境界つきでフォールバック
+    let winnerEmail = (snapshot ?? []).find((s) => s.staff_id === winnerStaffId)?.email ?? null
+    if (!winnerEmail) {
+      const { data: st } = await admin
+        .from('staff')
+        .select('email')
+        .eq('tenant_id', off.tenant_id)
+        .eq('id', winnerStaffId)
+        .maybeSingle()
+      winnerEmail = st?.email ?? null
+    }
+
+    let confirmedMailOk = false
+    if (winnerEmail) {
+      const lines = [
+        `${d2.full} ${minToHHMM(off.start_min)}〜${minToHHMM(off.end_min)} のシフトが確定しました。`,
+        '',
+        `店舗: ${storeName}`,
+      ]
+      if (positionName) lines.push(`ポジション: ${positionName}`)
+      lines.push('', '当日はよろしくお願いします。', '', '— SHIN勤怠')
+      const res = await sendMail(
+        winnerEmail,
+        `【SHIN勤怠】${d2.md} シフト確定のお知らせ`,
+        lines.join('\n'),
+      )
+      confirmedMailOk = res.ok
+    }
+
+    let supersededSent = 0
+    const losers = (snapshot ?? []).filter((s) => s.staff_id !== winnerStaffId && s.email)
+    const loserText = [
+      `先日お願いした${d2.md}のシフトは、今回は他の方に決まりました。`,
+      'またの機会によろしくお願いします。',
+      '',
+      '— SHIN勤怠',
+    ].join('\n')
+    for (const l of losers) {
+      const res = await sendMail(l.email!, `【SHIN勤怠】${d2.md} シフトのお知らせ`, loserText)
+      if (res.ok) supersededSent++
+    }
+
+    return {
+      ok: true,
+      reason: r.reason ?? null,
+      overlapWarning: r.overlap_warning === true,
+      confirmed_mail_ok: confirmedMailOk,
+      superseded_mail_sent: supersededSent,
+    }
   })
