@@ -345,3 +345,65 @@ export async function deletePosition(id: string): Promise<void> {
   const { error } = await supabase.from('positions').delete().eq('id', id)
   if (error) throw error
 }
+
+/* ---------- 営業時間帯（shift_time_bands・0019） ---------- */
+
+export interface TimeBand {
+  id: string
+  store_id: string
+  name: string
+  start_min: number
+  end_min: number
+  sort_order: number
+  is_active: boolean
+}
+
+/** 有効な時間帯を sort_order 順に。storeId 未指定なら自スコープ全店分（stb_sel=メンバー可） */
+export async function fetchTimeBands(storeId?: string): Promise<TimeBand[]> {
+  const supabase = await getSupabase()
+  let q = supabase
+    .from('shift_time_bands')
+    .select('id, store_id, name, start_min, end_min, sort_order, is_active')
+    .eq('is_active', true)
+    .order('sort_order')
+    .order('start_min')
+  if (storeId) q = q.eq('store_id', storeId)
+  const { data, error } = await q
+  if (error) throw error
+  return data ?? []
+}
+
+/** 追加。stb_sel がメンバー可なので RETURNING×RLS 問題なし（createPosition と同じ流儀） */
+export async function createTimeBand(
+  tenantId: string,
+  b: { store_id: string; name: string; start_min: number; end_min: number; sort_order: number },
+): Promise<string> {
+  const supabase = await getSupabase()
+  const { data, error } = await supabase
+    .from('shift_time_bands')
+    .insert({ tenant_id: tenantId, ...b })
+    .select('id')
+    .single()
+  if (error) throw error
+  return data.id
+}
+
+export async function updateTimeBand(
+  id: string,
+  patch: {
+    name?: string
+    start_min?: number
+    end_min?: number
+    sort_order?: number
+    is_active?: boolean
+  },
+): Promise<void> {
+  const supabase = await getSupabase()
+  const { error } = await supabase.from('shift_time_bands').update(patch).eq('id', id)
+  if (error) throw error
+}
+
+/** 論理削除（is_active=false）。過去参照を壊さないため完全削除は使わない */
+export async function deleteTimeBand(id: string): Promise<void> {
+  return updateTimeBand(id, { is_active: false })
+}

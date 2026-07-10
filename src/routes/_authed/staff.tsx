@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { NumberInput } from '@/components/NumberInput'
@@ -12,18 +12,22 @@ import {
   createEmploymentKind,
   createPosition,
   createStaff,
+  createTimeBand,
   deleteEmploymentKind,
   deletePosition,
+  deleteTimeBand,
   fetchEmploymentKinds,
   fetchPositions,
   fetchStaffPage,
   fetchStores,
   fetchStoresPage,
+  fetchTimeBands,
   saveStore,
   type Assignment,
   type StaffWithDetails,
   type Store,
 } from '@/lib/queries/master'
+import { hhmmToMin, minToLabel } from '@/lib/queries/shifts'
 
 export const Route = createFileRoute('/_authed/staff')({
   component: MasterPage,
@@ -257,6 +261,8 @@ function MasterPage() {
             loading={posQ.isPending}
             canEdit={canEdit}
           />
+
+          <TimeBandsCard tenantId={me.tenantId} stores={storesQ.data ?? []} canEdit={canEdit} />
         </div>
       </div>
 
@@ -858,6 +864,197 @@ function PositionsCard({
             ＋ 追加
           </button>
         </div>
+      )}
+    </div>
+  )
+}
+
+/* ---------------- 営業時間帯（shift_time_bands・0019） ---------------- */
+
+const TIME_BAND_PRESETS = [
+  { name: 'モーニング', start_min: 360, end_min: 660 },
+  { name: 'ランチ', start_min: 660, end_min: 900 },
+  { name: 'ディナー', start_min: 1020, end_min: 1380 },
+  { name: '深夜', start_min: 1380, end_min: 1560 },
+]
+
+function TimeBandsCard({
+  tenantId,
+  stores,
+  canEdit,
+}: {
+  tenantId: string
+  stores: Store[]
+  canEdit: boolean
+}) {
+  const qc = useQueryClient()
+  const [storeId, setStoreId] = useState('')
+  const [name, setName] = useState('')
+  const [start, setStart] = useState('')
+  const [end, setEnd] = useState('')
+  const [nextDay, setNextDay] = useState(false)
+  const [sortOrder, setSortOrder] = useState<number | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!storeId && stores.length) setStoreId(stores[0].id)
+  }, [stores, storeId])
+
+  const bandsQ = useQuery({
+    queryKey: ['master', 'timebands', storeId],
+    enabled: !!storeId,
+    queryFn: () => fetchTimeBands(storeId),
+  })
+  const bands = bandsQ.data ?? []
+  const invalidate = () => void qc.invalidateQueries({ queryKey: ['master', 'timebands'] })
+
+  const nextOrder = () =>
+    bands.length > 0 ? Math.max(...bands.map((b) => b.sort_order)) + 10 : 0
+
+  /** 入力を検証して insert 用の値に。違反は日本語 Error（onError で inline 表示） */
+  const buildInput = () => {
+    const s = hhmmToMin(start)
+    const eBase = hhmmToMin(end)
+    if (!name.trim()) throw new Error('名前を入力してください。')
+    if (s === null || eBase === null) throw new Error('開始と終了の時刻を入力してください。')
+    const e = eBase + (nextDay ? 1440 : 0)
+    if (s >= 1440) throw new Error('開始は当日内にしてください。')
+    if (e <= s) throw new Error('終了は開始より後にしてください。')
+    if (e > 1560) throw new Error('終了は翌2:00までにしてください。')
+    return {
+      store_id: storeId,
+      name: name.trim(),
+      start_min: s,
+      end_min: e,
+      sort_order: sortOrder ?? nextOrder(),
+    }
+  }
+
+  const add = useMutation({
+    mutationFn: async () => createTimeBand(tenantId, buildInput()),
+    onSuccess: () => {
+      setName('')
+      setStart('')
+      setEnd('')
+      setNextDay(false)
+      setSortOrder(null)
+      invalidate()
+    },
+    onError: (e) => setError(errText(e, '時間帯の追加に失敗しました')),
+  })
+
+  const addPreset = useMutation({
+    mutationFn: (p: (typeof TIME_BAND_PRESETS)[number]) =>
+      createTimeBand(tenantId, { store_id: storeId, ...p, sort_order: nextOrder() }),
+    onSuccess: invalidate,
+    onError: (e) => setError(errText(e, '時間帯の追加に失敗しました')),
+  })
+
+  const del = useMutation({
+    mutationFn: deleteTimeBand, // 論理削除（is_active=false）
+    onSuccess: invalidate,
+    onError: (e) => setError(errText(e, '時間帯を削除できませんでした')),
+  })
+
+  const existingNames = new Set(bands.map((b) => b.name))
+
+  return (
+    <div className="card">
+      <div className="card-title">営業時間帯</div>
+      <p className="note">
+        モーニング/ランチ/ディナー/深夜など、店舗ごとの営業時間帯を定義します。
+        必要人数やシフトの過不足はこの時間帯ごとに見られます。
+      </p>
+
+      <label className="field">
+        <span>店舗</span>
+        <select value={storeId} onChange={(e) => setStoreId(e.target.value)}>
+          {stores.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      {bandsQ.isPending && !!storeId && <p className="note">読み込み中…</p>}
+      {error && (
+        <p className="login-error" role="alert">
+          {error}
+        </p>
+      )}
+
+      <div className="chip-list">
+        {!bandsQ.isPending && bands.length === 0 && <span className="note">未登録です。</span>}
+        {bands.map((b) => (
+          <span key={b.id} className="tagchip">
+            {b.name}
+            <span className="chip-note mono">
+              {minToLabel(b.start_min)}〜{minToLabel(b.end_min)}
+            </span>
+            {canEdit && (
+              <span className="x" role="button" onClick={() => del.mutate(b.id)}>
+                ×
+              </span>
+            )}
+          </span>
+        ))}
+      </div>
+
+      {canEdit && (
+        <>
+          <div className="inline-add">
+            <input
+              value={name}
+              placeholder="例）ディナー"
+              onChange={(e) => setName(e.target.value)}
+            />
+            <input type="time" step={3600} value={start} onChange={(e) => setStart(e.target.value)} />
+            <input type="time" step={3600} value={end} onChange={(e) => setEnd(e.target.value)} />
+            <label className="target-check tb-nextday">
+              <input
+                type="checkbox"
+                checked={nextDay}
+                onChange={(e) => setNextDay(e.target.checked)}
+              />
+              <span>翌日</span>
+            </label>
+            <NumberInput
+              value={sortOrder}
+              min={0}
+              placeholder="並び順"
+              className="tb-order"
+              onChange={setSortOrder}
+            />
+            <button
+              className="btn sm"
+              disabled={!name || !storeId || add.isPending}
+              onClick={() => {
+                setError(null)
+                add.mutate()
+              }}
+            >
+              ＋ 追加
+            </button>
+          </div>
+          <div className="tb-presets">
+            <span className="note">よくある時間帯:</span>
+            {TIME_BAND_PRESETS.map((p) => (
+              <button
+                key={p.name}
+                className="btn sm"
+                disabled={!storeId || existingNames.has(p.name) || addPreset.isPending}
+                title={existingNames.has(p.name) ? '同名の時間帯が既にあります' : undefined}
+                onClick={() => {
+                  setError(null)
+                  addPreset.mutate(p)
+                }}
+              >
+                {p.name} {minToLabel(p.start_min)}-{minToLabel(p.end_min)}
+              </button>
+            ))}
+          </div>
+        </>
       )}
     </div>
   )

@@ -4068,3 +4068,22 @@ h3,
   color: var(--muted);
   overflow-wrap: anywhere;
 }
+
+/* 営業時間帯カード（0019） */
+.tb-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.tb-nextday {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.inline-add .tb-order {
+  max-width: 72px;
+  flex: 0 1 72px;
+}

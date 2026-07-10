@@ -796,6 +796,10 @@ function RequirementsView() {
         </label>
       </div>
 
+      <p className="note">
+        時間帯の定義は「スタッフ」ページの<b>営業時間帯</b>で設定できます。
+      </p>
+
       {reqQ.error && (
         <p className="login-error" role="alert">
           {reqErrText(reqQ.error)}

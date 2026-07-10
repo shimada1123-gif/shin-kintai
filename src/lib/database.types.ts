@@ -1011,6 +1011,57 @@ export type Database = {
           },
         ]
       }
+      shift_time_bands: {
+        Row: {
+          created_at: string
+          end_min: number
+          id: string
+          is_active: boolean
+          name: string
+          sort_order: number
+          start_min: number
+          store_id: string
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          end_min: number
+          id?: string
+          is_active?: boolean
+          name: string
+          sort_order?: number
+          start_min: number
+          store_id: string
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          end_min?: number
+          id?: string
+          is_active?: boolean
+          name?: string
+          sort_order?: number
+          start_min?: number
+          store_id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shift_time_bands_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shift_time_bands_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       staff: {
         Row: {
           created_at: string

@@ -505,6 +505,10 @@ export const minToHHMM = (min: number | null): string => {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 }
 
+/** 分→表示ラベル。1440超は「翌HH:MM」（深夜跨ぎの時間帯表示用。例 1560→「翌02:00」） */
+export const minToLabel = (min: number): string =>
+  min >= 1440 ? `翌${minToHHMM(min - 1440)}` : minToHHMM(min)
+
 /** "HH:MM"（input type=time の値）→ 分。空は null */
 export const hhmmToMin = (v: string): number | null => {
   if (!v) return null
