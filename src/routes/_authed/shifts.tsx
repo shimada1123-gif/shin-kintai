@@ -903,6 +903,18 @@ function RequirementRowEditor({
           onClick={() => {
             setMsg(null)
             setError(null)
+            // 0上書きガード: ポジション登録済みの店でポジション別が未入力のまま保存すると
+            // need=posSum=0 となり、保存済みの need_count を 0 で潰す（データ破壊）。必ず確認を挟む
+            const storedNeedCount = initial?.need_count ?? 0
+            if (hasPositions && posSum === 0 && storedNeedCount > 0) {
+              if (
+                !confirm(
+                  `ポジション別が未入力のため必要人数0で保存されます。\n現在の必要人数(${storedNeedCount})と充足度表示が失われます。続行しますか？`,
+                )
+              ) {
+                return
+              }
+            }
             save.mutate()
           }}
         >
