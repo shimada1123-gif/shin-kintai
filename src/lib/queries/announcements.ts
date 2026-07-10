@@ -262,13 +262,22 @@ export async function updateAnnouncement(
 /** 論理削除（deleted_at/deleted_by）。復元不可（RLSで削除済みは編集も閲覧も不可） */
 export async function deleteAnnouncement(id: string, userId: string): Promise<void> {
   const supabase = await getSupabase()
-  const { data, error } = await supabase
+  // .select() を付けない: UPDATE ... RETURNING になると、更新後の行が
+  // ann_sel（deleted_at is null ∧ …）を満たさず 42501 で全体がロールバックされる
+  const { error } = await supabase
     .from('announcements')
     .update({ deleted_at: new Date().toISOString(), deleted_by: userId })
     .eq('id', id)
-    .select('id')
   if (error) throw error
-  if (!data || data.length === 0) {
+
+  // RETURNING が無いと RLS の0行更新（サイレント無視）を検出できないため、再SELECTで成否判定。
+  // 削除に成功していれば ann_sel により不可視になる。まだ見える＝更新が効いていない
+  const { data: still } = await supabase
+    .from('announcements')
+    .select('id')
+    .eq('id', id)
+    .maybeSingle()
+  if (still) {
     throw new Error('この投稿を削除する権限がないか、すでに削除されています。')
   }
 }
