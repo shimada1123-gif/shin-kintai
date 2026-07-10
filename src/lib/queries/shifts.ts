@@ -221,6 +221,8 @@ export const DAY_TYPES: { key: DayType; label: string; badgeCls: string }[] = [
 
 export interface RequirementRow {
   day_type: DayType
+  /** null=時間帯を分けない「通し」行（0020） */
+  time_band_id: string | null
   need_count: number
   /** ポジション名 → 必要人数（B案の主軸。例 {"キッチン":2,"フロア":2}） */
   need_by_position: Record<string, number>
@@ -233,11 +235,12 @@ export async function fetchRequirements(storeId: string): Promise<RequirementRow
   const supabase = await getSupabase()
   const { data, error } = await supabase
     .from('shift_requirements')
-    .select('day_type, need_count, need_by_position, min_by_kind, memo')
+    .select('day_type, time_band_id, need_count, need_by_position, min_by_kind, memo')
     .eq('store_id', storeId)
   if (error) throw error
   return (data ?? []).map((r) => ({
     day_type: r.day_type as DayType,
+    time_band_id: r.time_band_id,
     need_count: r.need_count,
     need_by_position: (r.need_by_position ?? {}) as Record<string, number>,
     min_by_kind: (r.min_by_kind ?? {}) as Record<string, number>,
@@ -258,6 +261,8 @@ export interface UpsertRequirementArgs {
   tenantId: string
   storeId: string
   dayType: DayType
+  /** null=通し（時間帯を分けない）。帯指定はその帯の id（0020） */
+  timeBandId: string | null
   /** ポジションが定義されている店では need_by_position の合計を渡す運用（B案） */
   needCount: number
   needByPosition: Record<string, number>
@@ -265,7 +270,11 @@ export interface UpsertRequirementArgs {
   memo: string | null
 }
 
-/** 保存は upsert（unique(store_id, day_type)）。防壁は req_write = shift_edit ∧ 自店。 */
+/**
+ * 保存は upsert。conflict target は 0020 の
+ * unique nulls not distinct (store_id, day_type, time_band_id) — null（通し）行も正しく1行に潰れる。
+ * 防壁は req_write = shift_edit ∧ 自店。
+ */
 export async function upsertRequirement(a: UpsertRequirementArgs): Promise<void> {
   const supabase = await getSupabase()
   const { error } = await supabase.from('shift_requirements').upsert(
@@ -273,12 +282,13 @@ export async function upsertRequirement(a: UpsertRequirementArgs): Promise<void>
       tenant_id: a.tenantId,
       store_id: a.storeId,
       day_type: a.dayType,
+      time_band_id: a.timeBandId,
       need_count: Math.max(0, Math.trunc(a.needCount)),
       need_by_position: cleanCounts(a.needByPosition),
       min_by_kind: cleanCounts(a.minByKind),
       memo: a.memo,
     },
-    { onConflict: 'store_id,day_type' },
+    { onConflict: 'store_id,day_type,time_band_id' },
   )
   if (error) throw error
 }

@@ -4169,3 +4169,38 @@ h3,
 .tb-order-field .tb-order {
   max-width: 110px;
 }
+
+/* 必要人数: カード内の時間帯タブ（0020） */
+.req-band-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.req-band-tab {
+  font-family: var(--jp);
+  font-size: 11.5px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--card);
+  color: var(--muted);
+  cursor: pointer;
+  transition: 0.12s;
+}
+
+.req-band-tab.on {
+  border-color: var(--indigo);
+  background: var(--indigo);
+  color: #fff;
+}
+
+.req-band-unset {
+  font-size: 9px;
+  font-weight: 400;
+  opacity: 0.75;
+}

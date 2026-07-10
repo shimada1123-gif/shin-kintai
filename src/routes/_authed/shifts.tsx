@@ -19,7 +19,13 @@ import {
   type OfferRecipientRow,
   type OfferRow,
 } from '@/lib/queries/offers'
-import { fetchEmploymentKinds, fetchPositions, fetchStaffList } from '@/lib/queries/master'
+import {
+  fetchEmploymentKinds,
+  fetchPositions,
+  fetchStaffList,
+  fetchTimeBands,
+  type TimeBand,
+} from '@/lib/queries/master'
 import {
   asgErrText,
   availErrText,
@@ -769,6 +775,12 @@ function RequirementsView() {
 
   const kindsQ = useQuery({ queryKey: ['master', 'kinds'], queryFn: fetchEmploymentKinds })
   const posQ = useQuery({ queryKey: ['master', 'positions'], queryFn: fetchPositions })
+  // この店の営業時間帯（0019・is_active のみ・sort_order 順）。0件なら「通し」タブのみ＝現行同一
+  const bandsQ = useQuery({
+    queryKey: ['master', 'timebands', storeId],
+    enabled: !!storeId,
+    queryFn: () => fetchTimeBands(storeId),
+  })
 
   if (!me) return null
 
@@ -816,7 +828,7 @@ function RequirementsView() {
 
       {reqQ.data &&
         DAY_TYPES.map((dt) => (
-          <RequirementRowEditor
+          <RequirementDayCard
             key={`${storeId}|${dt.key}`}
             storeId={storeId}
             dayType={dt.key}
@@ -824,7 +836,8 @@ function RequirementsView() {
             badgeCls={dt.badgeCls}
             kindLabels={kindLabels}
             positionNames={positionNames}
-            initial={reqQ.data.find((r) => r.day_type === dt.key) ?? null}
+            bands={bandsQ.data ?? []}
+            rows={reqQ.data}
           />
         ))}
 
@@ -838,14 +851,16 @@ function RequirementsView() {
   )
 }
 
-function RequirementRowEditor({
+/** day_type 1枚のカード。カード内に時間帯タブ（「通し」＋帯）を持ち、選択に応じて RowEditor を切替 */
+function RequirementDayCard({
   storeId,
   dayType,
   dayLabel,
   badgeCls,
   kindLabels,
   positionNames,
-  initial,
+  bands,
+  rows,
 }: {
   storeId: string
   dayType: DayType
@@ -853,7 +868,73 @@ function RequirementRowEditor({
   badgeCls: string
   kindLabels: string[]
   positionNames: string[]
+  bands: TimeBand[]
+  rows: RequirementRow[]
+}) {
+  const [bandId, setBandId] = useState<string | null>(null)
+
+  const tabs: { id: string | null; name: string }[] = [
+    { id: null, name: '通し' },
+    ...bands.map((b) => ({ id: b.id, name: b.name })),
+  ]
+  const hasRow = (bid: string | null) =>
+    rows.some((r) => r.day_type === dayType && r.time_band_id === bid)
+  const initial = rows.find((r) => r.day_type === dayType && r.time_band_id === bandId) ?? null
+
+  // 帯未定義の店は「通し」のみ＝タブUIを出さず現行と同一の見た目（後方互換）
+  const bandTabs =
+    tabs.length > 1 ? (
+      <div className="req-band-tabs">
+        {tabs.map((t) => (
+          <button
+            key={t.id ?? 'all'}
+            type="button"
+            className={`req-band-tab${bandId === t.id ? ' on' : ''}`}
+            onClick={() => setBandId(t.id)}
+          >
+            {t.name}
+            {!hasRow(t.id) && <span className="req-band-unset">未設定</span>}
+          </button>
+        ))}
+      </div>
+    ) : null
+
+  return (
+    <RequirementRowEditor
+      key={`${storeId}|${dayType}|${bandId ?? 'all'}`}
+      storeId={storeId}
+      dayType={dayType}
+      timeBandId={bandId}
+      dayLabel={dayLabel}
+      badgeCls={badgeCls}
+      kindLabels={kindLabels}
+      positionNames={positionNames}
+      initial={initial}
+      bandTabs={bandTabs}
+    />
+  )
+}
+
+function RequirementRowEditor({
+  storeId,
+  dayType,
+  timeBandId,
+  dayLabel,
+  badgeCls,
+  kindLabels,
+  positionNames,
+  initial,
+  bandTabs,
+}: {
+  storeId: string
+  dayType: DayType
+  timeBandId: string | null
+  dayLabel: string
+  badgeCls: string
+  kindLabels: string[]
+  positionNames: string[]
   initial: RequirementRow | null
+  bandTabs?: React.ReactNode
 }) {
   const { me } = useMe()
   const qc = useQueryClient()
@@ -883,6 +964,7 @@ function RequirementRowEditor({
         tenantId: me!.tenantId,
         storeId,
         dayType,
+        timeBandId,
         needCount: need,
         needByPosition: hasPositions ? needByPos : {},
         minByKind,
@@ -913,6 +995,7 @@ function RequirementRowEditor({
     <div className="card req-row">
       <div className="req-head">
         <span className={`dtype-badge ${badgeCls}`}>{dayLabel}</span>
+        {bandTabs}
         <div className="req-need">
           <span className="req-lab">必要人数{hasPositions ? '（自動集計）' : ''}</span>
           {hasPositions ? (
@@ -1195,7 +1278,10 @@ function BuildView() {
   const positions = (posQ.data ?? []).filter((p) => p.store_id === null || p.store_id === storeId)
   const posName = (id: string | null) =>
     id ? (positions.find((p) => p.id === id)?.name ?? 'ポジション') : null
-  const reqByType = new Map((reqQ.data ?? []).map((r) => [r.day_type, r]))
+  // 充足度は現段では「通し」行のみ参照（帯別行が入っても挙動不変の後方互換ガード。帯別過不足は次段）
+  const reqByType = new Map(
+    (reqQ.data ?? []).filter((r) => r.time_band_id === null).map((r) => [r.day_type, r]),
+  )
   const holidays = holidaysQ.data ?? new Map<string, string>()
 
   const draftCount = (asgQ.data ?? []).filter((a) => a.status === 'draft').length
