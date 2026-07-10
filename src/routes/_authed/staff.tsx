@@ -895,6 +895,7 @@ function TimeBandsCard({
   const [nextDay, setNextDay] = useState(false)
   const [sortOrder, setSortOrder] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [manualOpen, setManualOpen] = useState(false) // 手入力フォームの開閉（表示のみ）
 
   useEffect(() => {
     if (!storeId && stores.length) setStoreId(stores[0].id)
@@ -985,7 +986,11 @@ function TimeBandsCard({
       )}
 
       <div className="chip-list">
-        {!bandsQ.isPending && bands.length === 0 && <span className="note">未登録です。</span>}
+        {!bandsQ.isPending && bands.length === 0 && (
+          <span className="note">
+            {canEdit ? 'まだ時間帯がありません。下から選ぶと追加できます。' : 'まだ時間帯がありません。'}
+          </span>
+        )}
         {bands.map((b) => (
           <span key={b.id} className="tagchip">
             {b.name}
@@ -1003,46 +1008,13 @@ function TimeBandsCard({
 
       {canEdit && (
         <>
-          <div className="inline-add">
-            <input
-              value={name}
-              placeholder="例）ディナー"
-              onChange={(e) => setName(e.target.value)}
-            />
-            <input type="time" step={3600} value={start} onChange={(e) => setStart(e.target.value)} />
-            <input type="time" step={3600} value={end} onChange={(e) => setEnd(e.target.value)} />
-            <label className="target-check tb-nextday">
-              <input
-                type="checkbox"
-                checked={nextDay}
-                onChange={(e) => setNextDay(e.target.checked)}
-              />
-              <span>翌日</span>
-            </label>
-            <NumberInput
-              value={sortOrder}
-              min={0}
-              placeholder="並び順"
-              className="tb-order"
-              onChange={setSortOrder}
-            />
-            <button
-              className="btn sm"
-              disabled={!name || !storeId || add.isPending}
-              onClick={() => {
-                setError(null)
-                add.mutate()
-              }}
-            >
-              ＋ 追加
-            </button>
-          </div>
+          <div className="tb-sec-lab">よくある時間帯から選ぶ</div>
           <div className="tb-presets">
-            <span className="note">よくある時間帯:</span>
             {TIME_BAND_PRESETS.map((p) => (
               <button
                 key={p.name}
-                className="btn sm"
+                type="button"
+                className="tb-preset-btn"
                 disabled={!storeId || existingNames.has(p.name) || addPreset.isPending}
                 title={existingNames.has(p.name) ? '同名の時間帯が既にあります' : undefined}
                 onClick={() => {
@@ -1050,10 +1022,82 @@ function TimeBandsCard({
                   addPreset.mutate(p)
                 }}
               >
-                {p.name} {minToLabel(p.start_min)}-{minToLabel(p.end_min)}
+                <b>{p.name}</b>
+                <span className="tb-preset-time mono">
+                  {minToLabel(p.start_min)}〜{minToLabel(p.end_min)}
+                </span>
               </button>
             ))}
           </div>
+
+          <button
+            type="button"
+            className="tb-manual-toggle"
+            onClick={() => setManualOpen((v) => !v)}
+          >
+            {manualOpen ? '− 手入力を閉じる' : '＋ 自分で時間帯を追加'}
+          </button>
+
+          {manualOpen && (
+            <div className="tb-manual-form">
+              <label className="field">
+                <span>時間帯の名前</span>
+                <input
+                  value={name}
+                  placeholder="例：ディナー、アイドルタイム"
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </label>
+              <div className="asg-grid">
+                <label className="field">
+                  <span>開始</span>
+                  <input
+                    type="time"
+                    step={3600}
+                    value={start}
+                    onChange={(e) => setStart(e.target.value)}
+                  />
+                </label>
+                <label className="field">
+                  <span>終了</span>
+                  <input
+                    type="time"
+                    step={3600}
+                    value={end}
+                    onChange={(e) => setEnd(e.target.value)}
+                  />
+                </label>
+              </div>
+              <label className="target-check tb-nextday">
+                <input
+                  type="checkbox"
+                  checked={nextDay}
+                  onChange={(e) => setNextDay(e.target.checked)}
+                />
+                <span>終了が翌日にまたぐ（深夜営業）</span>
+              </label>
+              <label className="field tb-order-field">
+                <span>並び順（任意）</span>
+                <NumberInput
+                  value={sortOrder}
+                  min={0}
+                  placeholder="空なら末尾"
+                  className="tb-order"
+                  onChange={setSortOrder}
+                />
+              </label>
+              <button
+                className="btn sm pri"
+                disabled={!name || !storeId || add.isPending}
+                onClick={() => {
+                  setError(null)
+                  add.mutate()
+                }}
+              >
+                {add.isPending ? '追加中…' : 'この時間帯を追加'}
+              </button>
+            </div>
+          )}
         </>
       )}
     </div>
