@@ -22,6 +22,7 @@ import {
   fetchMyStores,
   fetchRequirements,
   fetchStoreAvailability,
+  fetchStoreRoster,
   hhmmToMin,
   minToHHMM,
   publishWeek,
@@ -33,6 +34,7 @@ import {
   type AvailRow,
   type DayType,
   type RequirementRow,
+  type RosterEntry,
   type ShiftAsg,
 } from '@/lib/queries/shifts'
 import { ymd } from '@/lib/worktime'
@@ -1014,6 +1016,7 @@ function BuildView() {
     | { mode: 'edit'; asg: ShiftAsg }
     | null
   >(null)
+  const [adding, setAdding] = useState<string | null>(null) // ＋スタッフを追加を開いた日付
   const week = useMemo(() => weekMeta(weekBase), [weekBase])
 
   const canAnnounce = has('announce_post')
@@ -1086,6 +1089,12 @@ function BuildView() {
   const holidaysQ = useQuery({
     queryKey: ['holidays', week.from, 'wk'],
     queryFn: () => fetchHolidays(week.from, week.to),
+  })
+  // 所属スタッフ（希望に関わらず直接配置する候補）。RLS: wage_individual_view が無い役割では空
+  const rosterQ = useQuery({
+    queryKey: ['store_roster', storeId],
+    enabled: !!storeId,
+    queryFn: () => fetchStoreRoster(storeId),
   })
 
   if (!me) return null
@@ -1288,6 +1297,14 @@ function BuildView() {
                   ))}
                 </div>
               )}
+
+              <button
+                type="button"
+                className="btn sm add-staff-btn"
+                onClick={() => setAdding(d.date)}
+              >
+                ＋ スタッフを追加
+              </button>
             </div>
           )
         })}
@@ -1307,7 +1324,122 @@ function BuildView() {
           onClose={() => setEditing(null)}
         />
       )}
+
+      {adding && storeId && (
+        <AddStaffModal
+          date={adding}
+          roster={rosterQ.data ?? []}
+          rosterLoading={rosterQ.isPending}
+          avails={(availQ.data ?? []).filter((r) => r.work_date === adding)}
+          assignedIds={
+            new Set(
+              (asgQ.data ?? []).filter((a) => a.work_date === adding).map((a) => a.staff_id),
+            )
+          }
+          onPick={(entry, avail) => {
+            // ×（NG）希望でも管理者判断で配置できる。ただし必ず警告を挟む
+            if (avail?.kind === 'off') {
+              if (
+                !confirm(
+                  `${entry.name} さんはこの日「×（NG）」希望です。それでも配置しますか？`,
+                )
+              ) {
+                return
+              }
+            }
+            setEditing({
+              mode: 'create',
+              date: adding,
+              staffId: entry.staffId,
+              staffName: entry.name,
+              avail,
+            })
+            setAdding(null)
+          }}
+          onClose={() => setAdding(null)}
+        />
+      )}
     </>
+  )
+}
+
+/** 希望の有無に関わらず所属スタッフから選んで配置するモーダル */
+function AddStaffModal({
+  date,
+  roster,
+  rosterLoading,
+  avails,
+  assignedIds,
+  onPick,
+  onClose,
+}: {
+  date: string
+  roster: RosterEntry[]
+  rosterLoading: boolean
+  avails: AvailRow[]
+  assignedIds: Set<string>
+  onPick: (entry: RosterEntry, avail: AvailRow | null) => void
+  onClose: () => void
+}) {
+  const availBy = new Map(avails.map((r) => [r.staff_id, r]))
+  const dateLabel = new Date(`${date}T00:00:00`).toLocaleDateString('ja-JP', {
+    month: 'long',
+    day: 'numeric',
+    weekday: 'short',
+  })
+
+  return (
+    <div className="modal show" onClick={onClose} role="dialog" aria-modal="true">
+      <div className="mcard mcard-wide" onClick={(e) => e.stopPropagation()}>
+        <div className="mh">{dateLabel} · スタッフを追加（希望に関わらず配置）</div>
+
+        {rosterLoading && <p className="note">読み込み中…</p>}
+        {!rosterLoading && roster.length === 0 && (
+          <p className="note">
+            追加できるスタッフがいません（所属スタッフの取得には個人賃金の閲覧権限が必要です）。
+          </p>
+        )}
+
+        <div className="roster-list">
+          {roster.map((s) => {
+            const av = availBy.get(s.staffId) ?? null
+            const assigned = assignedIds.has(s.staffId)
+            return (
+              <button
+                key={s.staffId}
+                type="button"
+                className="roster-row"
+                disabled={assigned}
+                onClick={() => onPick(s, av)}
+              >
+                <b>{s.name}</b>
+                {s.kindLabel && <span className="muted-tag">{s.kindLabel}</span>}
+                <span className={`roster-avail ra-${av?.kind ?? 'none'}`}>
+                  {av === null && '未提出'}
+                  {av?.kind === 'avail' && '○ 終日OK'}
+                  {av?.kind === 'partial' && (
+                    <>
+                      △{' '}
+                      <span className="mono">
+                        {minToHHMM(av.start_min)}-{minToHHMM(av.end_min)}
+                      </span>
+                    </>
+                  )}
+                  {av?.kind === 'off' && '× NG'}
+                </span>
+                {assigned && <span className="pub-badge">配置済み</span>}
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="mbtns">
+          <button className="btn sm" onClick={onClose}>
+            閉じる
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -1409,6 +1541,25 @@ function AsgEditorModal({
             <input type="time" step={3600} value={end} onChange={(e) => setEnd(e.target.value)} />
           </label>
         </div>
+
+        {(() => {
+          // △（時間指定）希望の範囲外に配置しようとしたら軽い注意（保存は妨げない）
+          const av = editing.mode === 'create' ? editing.avail : null
+          if (!av || av.kind !== 'partial') return null
+          const availStart = av.start_min
+          const availEnd = av.end_min
+          if (availStart === null || availEnd === null) return null
+          const startMin = hhmmToMin(start)
+          const endMin = hhmmToMin(end)
+          if (startMin === null || endMin === null) return null
+          if (startMin >= availStart && endMin <= availEnd) return null
+          return (
+            <p className="note asg-avail-warn">
+              希望時間（{minToHHMM(availStart)}-{minToHHMM(availEnd)}）の
+              外に配置しようとしています。本人に確認してください。
+            </p>
+          )
+        })()}
 
         <div className="asg-grid">
           <label className="field">

@@ -3545,3 +3545,73 @@ h3,
 .publish-notify .note {
   margin-left: 4px;
 }
+
+/* シフト作成: ＋スタッフを追加（希望に関わらず配置） */
+.add-staff-btn {
+  margin-top: 8px;
+  width: 100%;
+  border-style: dashed;
+}
+
+.roster-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 50dvh;
+  overflow-y: auto;
+}
+
+.roster-row {
+  font-family: var(--jp);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  text-align: left;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 12px;
+  cursor: pointer;
+  transition: 0.12s;
+}
+
+.roster-row:hover:not(:disabled) {
+  border-color: var(--indigo);
+}
+
+.roster-row:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.roster-avail {
+  margin-left: auto;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.roster-avail.ra-avail {
+  color: var(--green);
+}
+
+.roster-avail.ra-partial {
+  color: #b8860b;
+}
+
+.roster-avail.ra-off {
+  color: var(--red);
+}
+
+.roster-avail.ra-none {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.asg-avail-warn {
+  color: #b8860b;
+  font-weight: 700;
+  margin: 2px 0 8px;
+}
