@@ -1206,6 +1206,14 @@ function BuildView() {
     return m
   }, [offRecQ.data])
 
+  // 営業時間帯（0019）。0件=帯未定義の店＝現行の通し充足度表示のまま（後方互換）
+  const bandsQ = useQuery({
+    queryKey: ['master', 'timebands', storeId],
+    enabled: !!storeId,
+    queryFn: () => fetchTimeBands(storeId),
+  })
+  const bands = bandsQ.data ?? []
+
   // 下書きオファー（未送信）の集計と一斉送信（フェーズ②）
   const [draftPanelOpen, setDraftPanelOpen] = useState(false)
   const [draftMsg, setDraftMsg] = useState<string | null>(null)
@@ -1557,14 +1565,15 @@ function BuildView() {
                   <small className="day-dow">（{DOW_LABELS[d.dow]}）</small>
                 </span>
                 {holiday && <span className="cal-holiday">{holiday}</span>}
-                {need > 0 && (
+                {bands.length === 0 && need > 0 && (
                   <span className={`cov-total mono${total >= need ? ' ok' : ' short'}`}>
                     {total}/{need}
                   </span>
                 )}
               </div>
 
-              {req && Object.keys(req.need_by_position).length > 0 && (
+              {/* 帯未定義の店: 現行の通し充足度チップ（後方互換・無変更） */}
+              {bands.length === 0 && req && Object.keys(req.need_by_position).length > 0 && (
                 <div className="cov-rows">
                   {Object.entries(req.need_by_position).map(([name, needN]) => {
                     const got = byPos.get(name) ?? 0
@@ -1572,6 +1581,51 @@ function BuildView() {
                       <span key={name} className={`cov mono${got >= needN ? ' ok' : ' short'}`}>
                         {name} {got}/{needN}
                       </span>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* 帯定義済みの店: 帯別の過不足バンドを主表示（通しチップは出さない） */}
+              {bands.length > 0 && (
+                <div className="band-covs">
+                  {bands.map((b) => {
+                    // 帯別要件 → 無ければ通し要件にフォールバック
+                    const bandReq =
+                      (reqQ.data ?? []).find(
+                        (r) => r.day_type === dt && r.time_band_id === b.id,
+                      ) ?? null
+                    const effReq = bandReq ?? req
+                    const needBy = effReq?.need_by_position ?? {}
+                    // 重なり判定（簡易版・当日域）: 帯に触れる配置を数える。
+                    // 配置は 0-1440 域のみ（深夜跨ぎ保存手段なし）のため帯の1440超部分は実害なし。
+                    // 按分せず「重なれば在籍1（0.5換算は0.5）」でカウントする
+                    const bandAsgs = dayAsgs.filter(
+                      (a) => a.start_min < b.end_min && a.end_min > b.start_min,
+                    )
+                    const haveBy = new Map<string, number>()
+                    for (const a of bandAsgs) {
+                      const n = posName(a.position_id)
+                      if (n) haveBy.set(n, (haveBy.get(n) ?? 0) + weightOf(a))
+                    }
+                    const needEntries = Object.entries(needBy)
+                    return (
+                      <div key={b.id} className="band-cov">
+                        <span className="band-cov-name">{b.name}</span>
+                        {needEntries.length === 0 ? (
+                          <span className="bc-unset">未設定</span>
+                        ) : (
+                          needEntries.map(([name, needN]) => {
+                            const got = haveBy.get(name) ?? 0
+                            const cls = got < needN ? ' short' : got === needN ? ' ok' : ' over'
+                            return (
+                              <span key={name} className={`cov mono${cls}`}>
+                                {name} {got}/{needN}
+                              </span>
+                            )
+                          })
+                        )}
+                      </div>
                     )
                   })}
                 </div>
