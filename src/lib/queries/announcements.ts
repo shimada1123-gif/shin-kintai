@@ -259,25 +259,17 @@ export async function updateAnnouncement(
   }
 }
 
-/** 論理削除（deleted_at/deleted_by）。復元不可（RLSで削除済みは編集も閲覧も不可） */
-export async function deleteAnnouncement(id: string, userId: string): Promise<void> {
+/**
+ * 論理削除。復元不可（RLSで削除済みは編集も閲覧も不可）。
+ * 直接 update だと PostgREST が内部で付ける RETURNING に ann_sel（deleted_at is null）が
+ * 適用されて 42501 になるため、権限チェック内蔵の definer 関数（0011）を rpc で呼ぶ。
+ * deleted_by はサーバー側 auth.uid() で記録される。
+ */
+export async function deleteAnnouncement(id: string): Promise<void> {
   const supabase = await getSupabase()
-  // .select() を付けない: UPDATE ... RETURNING になると、更新後の行が
-  // ann_sel（deleted_at is null ∧ …）を満たさず 42501 で全体がロールバックされる
-  const { error } = await supabase
-    .from('announcements')
-    .update({ deleted_at: new Date().toISOString(), deleted_by: userId })
-    .eq('id', id)
+  const { data, error } = await supabase.rpc('app_announcement_delete', { aid: id })
   if (error) throw error
-
-  // RETURNING が無いと RLS の0行更新（サイレント無視）を検出できないため、再SELECTで成否判定。
-  // 削除に成功していれば ann_sel により不可視になる。まだ見える＝更新が効いていない
-  const { data: still } = await supabase
-    .from('announcements')
-    .select('id')
-    .eq('id', id)
-    .maybeSingle()
-  if (still) {
+  if (data !== true) {
     throw new Error('この投稿を削除する権限がないか、すでに削除されています。')
   }
 }

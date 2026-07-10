@@ -1121,6 +1121,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      app_announcement_delete: { Args: { aid: string }; Returns: boolean }
       app_announcement_manage: { Args: { aid: string }; Returns: boolean }
       app_announcement_visible: { Args: { aid: string }; Returns: boolean }
       app_can_store: { Args: { sid: string }; Returns: boolean }

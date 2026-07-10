@@ -100,7 +100,7 @@ function BoardPage() {
   })
 
   const delMut = useMutation({
-    mutationFn: (id: string) => deleteAnnouncement(id, user!.id),
+    mutationFn: (id: string) => deleteAnnouncement(id),
     onSuccess: () => {
       invalidateAll()
       setDetail(null)
