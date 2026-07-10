@@ -151,24 +151,56 @@ async function assertCanManageMembership(caller: Caller, membershipId: string) {
 /* 1. 一覧                                                             */
 /* ------------------------------------------------------------------ */
 
-export const adminListUsers = createServerFn({ method: 'GET' }).handler(
-  async (): Promise<UserRow[]> => {
+export interface ListUsersInput {
+  /** 氏名・メールの部分一致（ilike、サーバー側フィルタ） */
+  search?: string
+  /** 最新◯件（created_at 降順）。未指定は全件 */
+  limit?: number
+}
+
+export interface ListUsersResult {
+  rows: UserRow[]
+  total: number
+}
+
+export const adminListUsers = createServerFn({ method: 'POST' })
+  .inputValidator((d: ListUsersInput | undefined) => d ?? {})
+  .handler(async ({ data }): Promise<ListUsersResult> => {
     const caller = await requireCaller()
     requireUserAdmin(caller)
 
     const admin = getAdminClient()
-    const { data, error } = await admin
+
+    // 検索: staff の氏名/メールを ilike で先に解決（% , ( ) は or 構文を壊すため除去）
+    const search = (data.search ?? '').trim().replace(/[%,()]/g, '')
+    let staffIdFilter: string[] | null = null
+    if (search) {
+      const pat = `%${search}%`
+      const { data: st } = await admin
+        .from('staff')
+        .select('id')
+        .eq('tenant_id', caller.tenantId)
+        .or(`full_name.ilike.${pat},email.ilike.${pat}`)
+        .limit(100)
+      staffIdFilter = (st ?? []).map((s) => s.id)
+      if (staffIdFilter.length === 0) return { rows: [], total: 0 }
+    }
+
+    let q = admin
       .from('memberships')
       .select(
-        'id, user_id, role, scope_area_id, scope_store_id, staff_id, staff:staff_id (full_name, email, status)',
+        'id, user_id, role, scope_area_id, scope_store_id, staff_id, created_at, staff:staff_id (full_name, email, status)',
       )
       .eq('tenant_id', caller.tenantId)
+      .order('created_at', { ascending: false })
+    if (staffIdFilter) q = q.in('staff_id', staffIdFilter)
 
+    const { data: rows, error } = await q
     assert(!error, 'ユーザー一覧の取得に失敗しました。')
 
     const storeIds = caller.role === 'owner' ? null : await visibleStoreIds(caller)
 
-    return (data ?? [])
+    const mapped = (rows ?? [])
       .filter((m) => {
         if (caller.role === 'owner') return true
         if (m.scope_area_id && m.scope_area_id === caller.scopeAreaId) return true
@@ -188,9 +220,11 @@ export const adminListUsers = createServerFn({ method: 'GET' }).handler(
           status: (staff?.status as 'active' | 'inactive') ?? 'active',
         }
       })
-      .sort((a, b) => a.fullName.localeCompare(b.fullName, 'ja'))
-  },
-)
+
+    const total = mapped.length
+    const limited = data.limit && data.limit > 0 ? mapped.slice(0, data.limit) : mapped
+    return { rows: limited, total }
+  })
 
 /* ------------------------------------------------------------------ */
 /* 2. ユーザー作成（失敗時は auth ユーザーをロールバック）                */

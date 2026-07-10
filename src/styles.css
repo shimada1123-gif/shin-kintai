@@ -1973,6 +1973,46 @@ input[type='datetime-local'] {
   }
 }
 
+/* 検索 + 最新◯件 */
+.search-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.search-input {
+  flex: 1;
+  min-width: 200px;
+  max-width: 360px;
+  font-family: var(--jp);
+  font-size: 13.5px;
+  color: var(--ink);
+  padding: 10px 13px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+}
+
+.search-input:focus-visible {
+  outline: 3px solid var(--gold-soft);
+  outline-offset: 1px;
+  border-color: var(--indigo);
+}
+
+.more-btn {
+  width: 100%;
+  margin-top: 10px;
+}
+
+@media (max-width: 480px) {
+  .search-input {
+    max-width: none;
+    width: 100%;
+  }
+}
+
 /* 補正履歴（行の展開） */
 .hist-cell {
   background: #faf9f6;

@@ -62,6 +62,87 @@ export async function fetchPositions(): Promise<Position[]> {
   return data ?? []
 }
 
+/** ilike パターンに使えない文字を除去（%,() は PostgREST の or 構文を壊す） */
+function sanitizeSearch(s: string | undefined): string {
+  return (s ?? '').trim().replace(/[%,()]/g, '')
+}
+
+export interface StaffPage {
+  rows: StaffWithDetails[]
+  total: number
+}
+
+/**
+ * スタッフ一覧のページ版: 最新順（created_at desc）+ limit。
+ * 検索は氏名の ilike（サーバー側）+ 区分タグ一致（staff_tags を ilike で引いて id を or）。
+ * RLS はそのまま最終防壁（権限外の行は返らない）。
+ */
+export async function fetchStaffPage(opts: {
+  search?: string
+  limit: number
+}): Promise<StaffPage> {
+  const supabase = await getSupabase()
+  const search = sanitizeSearch(opts.search)
+
+  // タグ一致の staff_id を先に解決（該当なしなら名前 ilike のみ）
+  let tagStaffIds: string[] = []
+  if (search) {
+    const { data: tagRows } = await supabase
+      .from('staff_tags')
+      .select('staff_id')
+      .ilike('tag', `%${search}%`)
+      .limit(100)
+    tagStaffIds = [...new Set((tagRows ?? []).map((t) => t.staff_id))]
+  }
+
+  let q = supabase
+    .from('staff')
+    .select('id, full_name, status, staff_tags (tag), staff_assignments (*)', { count: 'exact' })
+    .order('created_at', { ascending: false })
+    .limit(opts.limit)
+  if (search) {
+    const orParts = [`full_name.ilike.%${search}%`]
+    if (tagStaffIds.length > 0) orParts.push(`id.in.(${tagStaffIds.join(',')})`)
+    q = q.or(orParts.join(','))
+  }
+
+  const { data, error, count } = await q
+  if (error) throw error
+  const rows = (data ?? []).map((s) => ({
+    id: s.id,
+    full_name: s.full_name,
+    status: s.status,
+    tags: ((s.staff_tags ?? []) as { tag: string }[]).map((t) => t.tag),
+    assignments: (s.staff_assignments ?? []) as Assignment[],
+  }))
+  return { rows, total: count ?? rows.length }
+}
+
+export interface StorePage {
+  rows: Store[]
+  total: number
+}
+
+/** 店舗一覧のページ版: 店舗名 ilike + 最新順 + limit */
+export async function fetchStoresPage(opts: {
+  search?: string
+  limit: number
+}): Promise<StorePage> {
+  const supabase = await getSupabase()
+  const search = sanitizeSearch(opts.search)
+
+  let q = supabase
+    .from('stores')
+    .select('*', { count: 'exact' })
+    .order('created_at', { ascending: false })
+    .limit(opts.limit)
+  if (search) q = q.ilike('name', `%${search}%`)
+
+  const { data, error, count } = await q
+  if (error) throw error
+  return { rows: data ?? [], total: count ?? (data ?? []).length }
+}
+
 /* ------------------------------ スタッフ ------------------------------ */
 
 export interface CreateStaffArgs {

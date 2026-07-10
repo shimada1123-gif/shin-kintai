@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useDebounced } from '@/lib/hooks'
 import { ROLE_LABEL, useMe, type Role } from '@/lib/me-context'
 import { assignableRoles } from '@/lib/server/permissions'
 import {
@@ -33,10 +34,13 @@ function UsersPage() {
   const qc = useQueryClient()
   const [showForm, setShowForm] = useState(false)
   const [issued, setIssued] = useState<{ email: string; password: string } | null>(null)
+  const [search, setSearch] = useState('')
+  const [limit, setLimit] = useState(20)
+  const debounced = useDebounced(search, 300)
 
   const usersQuery = useQuery({
-    queryKey: ['admin_users'],
-    queryFn: () => adminListUsers(),
+    queryKey: ['admin_users', debounced, limit],
+    queryFn: () => adminListUsers({ data: { search: debounced, limit } }),
   })
 
   const invalidate = () => void qc.invalidateQueries({ queryKey: ['admin_users'] })
@@ -98,7 +102,27 @@ function UsersPage() {
       <div className="sec-h">
         <h3>登録済みユーザー</h3>
         <span className="rule" />
-        <span className="cnt mono">{usersQuery.data?.length ?? 0}</span>
+        <span className="cnt mono">
+          {usersQuery.data ? `${usersQuery.data.rows.length} / ${usersQuery.data.total}` : ''}
+        </span>
+      </div>
+
+      <div className="search-row">
+        <input
+          className="search-input"
+          type="search"
+          value={search}
+          placeholder="🔍 氏名・メールで検索"
+          onChange={(e) => {
+            setSearch(e.target.value)
+            setLimit(20)
+          }}
+        />
+        {usersQuery.data && usersQuery.data.total > usersQuery.data.rows.length && (
+          <span className="note">
+            他 {usersQuery.data.total - usersQuery.data.rows.length} 件。検索で絞り込めます。
+          </span>
+        )}
       </div>
 
       {usersQuery.isPending && <p className="note">読み込み中…</p>}
@@ -122,19 +146,25 @@ function UsersPage() {
               </tr>
             </thead>
             <tbody>
-              {usersQuery.data.length === 0 && (
+              {usersQuery.data.rows.length === 0 && (
                 <tr>
                   <td colSpan={6} className="note">
-                    表示できるユーザーがいません。
+                    {debounced ? '該当するユーザーが見つかりません。' : '表示できるユーザーがいません。'}
                   </td>
                 </tr>
               )}
-              {usersQuery.data.map((u) => (
+              {usersQuery.data.rows.map((u) => (
                 <UserRowView key={u.membershipId} row={u} canManage={canManage} onChanged={invalidate} />
               ))}
             </tbody>
           </table>
         </div>
+      )}
+
+      {usersQuery.data && usersQuery.data.total > usersQuery.data.rows.length && (
+        <button className="btn sm more-btn" onClick={() => setLimit((v) => v + 20)}>
+          もっと見る（あと {usersQuery.data.total - usersQuery.data.rows.length} 件）
+        </button>
       )}
     </section>
   )

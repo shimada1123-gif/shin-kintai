@@ -5,6 +5,7 @@ import { NumberInput } from '@/components/NumberInput'
 import { StaffEditModal } from '@/components/StaffEditModal'
 import { errText } from '@/lib/errors'
 import { geocodeAddress } from '@/lib/geocode'
+import { useDebounced } from '@/lib/hooks'
 import { useMe } from '@/lib/me-context'
 import { usePermissions } from '@/lib/perm'
 import {
@@ -15,8 +16,9 @@ import {
   deletePosition,
   fetchEmploymentKinds,
   fetchPositions,
-  fetchStaffList,
+  fetchStaffPage,
   fetchStores,
+  fetchStoresPage,
   saveStore,
   type Assignment,
   type StaffWithDetails,
@@ -47,7 +49,24 @@ function MasterPage() {
   const perms = usePermissions()
   const [editing, setEditing] = useState<StaffWithDetails | null>(null)
 
-  const staffQ = useQuery({ queryKey: ['master', 'staff'], queryFn: fetchStaffList })
+  // 一覧は検索 + 最新◯件（サーバー側 ilike / limit）。
+  const [staffSearch, setStaffSearch] = useState('')
+  const [staffLimit, setStaffLimit] = useState(20)
+  const staffSearchD = useDebounced(staffSearch, 300)
+  const staffQ = useQuery({
+    queryKey: ['master', 'staff', 'page', staffSearchD, staffLimit],
+    queryFn: () => fetchStaffPage({ search: staffSearchD, limit: staffLimit }),
+  })
+
+  const [storeSearch, setStoreSearch] = useState('')
+  const [storeLimit, setStoreLimit] = useState(20)
+  const storeSearchD = useDebounced(storeSearch, 300)
+  const storesPageQ = useQuery({
+    queryKey: ['master', 'stores', 'page', storeSearchD, storeLimit],
+    queryFn: () => fetchStoresPage({ search: storeSearchD, limit: storeLimit }),
+  })
+
+  // フォーム・モーダル・店舗名解決には全件（従来どおり）
   const storesQ = useQuery({ queryKey: ['master', 'stores'], queryFn: fetchStores })
   const kindsQ = useQuery({ queryKey: ['master', 'kinds'], queryFn: fetchEmploymentKinds })
   const posQ = useQuery({ queryKey: ['master', 'positions'], queryFn: fetchPositions })
@@ -84,6 +103,24 @@ function MasterPage() {
         <div className="card col-main">
           <div className="card-title">スタッフ登録</div>
 
+          <div className="search-row">
+            <input
+              className="search-input"
+              type="search"
+              value={staffSearch}
+              placeholder="🔍 氏名・区分タグで検索"
+              onChange={(e) => {
+                setStaffSearch(e.target.value)
+                setStaffLimit(20)
+              }}
+            />
+            {staffQ.data && (
+              <span className="note mono small">
+                {staffQ.data.rows.length} / {staffQ.data.total}
+              </span>
+            )}
+          </div>
+
           {staffQ.isPending && <p className="note">読み込み中…</p>}
           {staffQ.error && (
             <p className="login-error" role="alert">
@@ -105,14 +142,14 @@ function MasterPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {staffQ.data.length === 0 && (
+                  {staffQ.data.rows.length === 0 && (
                     <tr>
                       <td colSpan={6} className="note">
-                        登録されたスタッフがいません。
+                        {staffSearchD ? '該当するスタッフが見つかりません。' : '登録されたスタッフがいません。'}
                       </td>
                     </tr>
                   )}
-                  {staffQ.data.map((s) => {
+                  {staffQ.data.rows.map((s) => {
                     const storeNames = s.assignments
                       .map((a) => storesQ.data?.find((st) => st.id === a.store_id)?.name)
                       .filter(Boolean)
@@ -171,6 +208,12 @@ function MasterPage() {
             </div>
           )}
 
+          {staffQ.data && staffQ.data.total > staffQ.data.rows.length && (
+            <button className="btn sm more-btn" onClick={() => setStaffLimit((v) => v + 20)}>
+              もっと見る（あと {staffQ.data.total - staffQ.data.rows.length} 件）
+            </button>
+          )}
+
           {canEdit && storesQ.data && kindsQ.data && (
             <AddStaffForm tenantId={me.tenantId} stores={storesQ.data} kinds={kindsQ.data} />
           )}
@@ -187,9 +230,16 @@ function MasterPage() {
           <StoresCard
             tenantId={me.tenantId}
             areas={me.areas}
-            stores={storesQ.data ?? []}
-            loading={storesQ.isPending}
-            error={storesQ.error}
+            stores={storesPageQ.data?.rows ?? []}
+            total={storesPageQ.data?.total ?? 0}
+            search={storeSearch}
+            onSearch={(v) => {
+              setStoreSearch(v)
+              setStoreLimit(20)
+            }}
+            onMore={() => setStoreLimit((v) => v + 20)}
+            loading={storesPageQ.isPending}
+            error={storesPageQ.error}
             canEdit={isOwner}
           />
 
@@ -361,6 +411,10 @@ function StoresCard({
   tenantId,
   areas,
   stores,
+  total,
+  search,
+  onSearch,
+  onMore,
   loading,
   error,
   canEdit,
@@ -368,6 +422,10 @@ function StoresCard({
   tenantId: string
   areas: { id: string; name: string }[]
   stores: Store[]
+  total: number
+  search: string
+  onSearch: (v: string) => void
+  onMore: () => void
   loading: boolean
   error: unknown
   canEdit: boolean
@@ -384,6 +442,19 @@ function StoresCard({
       <p className="note">
         打刻ジオフェンス用に座標と半径を設定します。屋内やモール内は半径を広めに。
       </p>
+
+      <div className="search-row">
+        <input
+          className="search-input"
+          type="search"
+          value={search}
+          placeholder="🔍 店舗名で検索"
+          onChange={(e) => onSearch(e.target.value)}
+        />
+        <span className="note mono small">
+          {stores.length} / {total}
+        </span>
+      </div>
 
       {loading && <p className="note">読み込み中…</p>}
       {!!error && (
@@ -440,6 +511,16 @@ function StoresCard({
           </tbody>
         </table>
       </div>
+
+      {stores.length === 0 && !loading && (
+        <p className="note">{search ? '該当する店舗が見つかりません。' : '店舗が未登録です。'}</p>
+      )}
+
+      {total > stores.length && (
+        <button className="btn sm more-btn" onClick={onMore}>
+          もっと見る（あと {total - stores.length} 件）
+        </button>
+      )}
 
       {canEdit &&
         (adding ? (
