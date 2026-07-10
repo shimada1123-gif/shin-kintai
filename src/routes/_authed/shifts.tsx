@@ -108,7 +108,9 @@ function ShiftsPage() {
 
   const canEdit = perms.has('shift_edit')
   const hasSelf = !!me?.staffId
-  const [tab, setTab] = useState<'matrix' | 'build' | 'req' | 'dayoff' | 'mine' | 'myshift'>('mine')
+  const [tab, setTab] = useState<
+    'grid' | 'matrix' | 'build' | 'req' | 'dayoff' | 'mine' | 'myshift'
+  >('mine')
 
   // 権限が確定したら初期タブを決める（管理者はマトリクスが主）
   useEffect(() => {
@@ -146,6 +148,9 @@ function ShiftsPage() {
 
       {canEdit ? (
         <div className="tab-row">
+          <button className={`tab${tab === 'grid' ? ' on' : ''}`} onClick={() => setTab('grid')}>
+            一覧
+          </button>
           <button className={`tab${tab === 'matrix' ? ' on' : ''}`} onClick={() => setTab('matrix')}>
             希望一覧（全員）
           </button>
@@ -178,6 +183,9 @@ function ShiftsPage() {
       ) : (
         hasSelf && (
           <div className="tab-row">
+            <button className={`tab${tab === 'grid' ? ' on' : ''}`} onClick={() => setTab('grid')}>
+              一覧
+            </button>
             <button className={`tab${tab === 'mine' ? ' on' : ''}`} onClick={() => setTab('mine')}>
               希望を出す
             </button>
@@ -191,7 +199,9 @@ function ShiftsPage() {
         )
       )}
 
-      {tab === 'myshift' && hasSelf ? (
+      {tab === 'grid' ? (
+        <WeekGridView />
+      ) : tab === 'myshift' && hasSelf ? (
         <MyShiftView />
       ) : tab === 'build' && canEdit ? (
         <BuildView />
@@ -588,6 +598,269 @@ function AvailEditorModal({
 }
 
 /* -------------------------- 管理者: 希望マトリクス -------------------------- */
+
+/* -------------------------- 統合シフトグリッド（一覧・閲覧専用） -------------------------- */
+
+/** 分→コンパクト時刻（毎正時は「17」、それ以外は「17:30」） */
+const compactTime = (m: number): string => (m % 60 === 0 ? String(m / 60) : minToHHMM(m))
+
+function WeekGridView() {
+  const { me } = useMe()
+  const perms = usePermissions()
+  const canEdit = perms.has('shift_edit')
+  const [storeId, setStoreId] = useState('')
+  const [weekBase, setWeekBase] = useState(() => new Date())
+  const [editing, setEditing] = useState<{ mode: 'edit'; asg: ShiftAsg } | null>(null)
+  const week = useMemo(() => weekMeta(weekBase), [weekBase])
+
+  useEffect(() => {
+    if (!storeId && me?.stores.length) setStoreId(me.stores[0].id)
+  }, [me?.stores, storeId])
+
+  // 4クエリ＋祝日（すべて週範囲・追加DBなし）
+  const rosterQ = useQuery({
+    queryKey: ['store_roster', storeId],
+    enabled: !!storeId,
+    queryFn: () => fetchStoreRoster(storeId),
+  })
+  const asgQ = useQuery({
+    queryKey: ['shift_asg', storeId, week.from],
+    enabled: !!storeId,
+    queryFn: () => fetchAssignments(storeId, week.from, week.to),
+  })
+  const availQ = useQuery({
+    queryKey: ['avail', 'store', storeId, 'wk', week.from],
+    enabled: !!storeId,
+    queryFn: () => fetchStoreAvailability(storeId, week.from, week.to),
+  })
+  const dayoffQ = useQuery({
+    queryKey: ['staff_dayoff', storeId, week.from],
+    enabled: !!storeId,
+    queryFn: () => fetchStaffDayOffs(storeId, week.from, week.to),
+  })
+  const holidaysQ = useQuery({
+    queryKey: ['holidays', week.from, 'wk'],
+    queryFn: () => fetchHolidays(week.from, week.to),
+  })
+  const posQ = useQuery({ queryKey: ['master', 'positions'], queryFn: fetchPositions })
+
+  // 辞書化（key = `${staff_id}|${date}`）
+  const asgBy = useMemo(() => {
+    const m = new Map<string, ShiftAsg[]>()
+    for (const a of asgQ.data ?? []) {
+      const k = `${a.staff_id}|${a.work_date}`
+      const list = m.get(k) ?? []
+      list.push(a)
+      m.set(k, list)
+    }
+    return m
+  }, [asgQ.data])
+  const availBy = useMemo(() => {
+    const m = new Map<string, AvailRow>()
+    for (const r of availQ.data ?? []) m.set(`${r.staff_id}|${r.work_date}`, r)
+    return m
+  }, [availQ.data])
+  const offBy = useMemo(() => {
+    const m = new Map<string, StaffDayOffRow>()
+    for (const o of dayoffQ.data ?? []) m.set(`${o.staff_id}|${o.work_date}`, o)
+    return m
+  }, [dayoffQ.data])
+
+  if (!me) return null
+
+  const store = me.stores.find((s) => s.id === storeId)
+  const closedDows = store ? closedDowsOf(store) : []
+  const roster = rosterQ.data ?? []
+  const positions = posQ.data ?? []
+  const posInitial = (id: string | null) =>
+    id ? (positions.find((p) => p.id === id)?.name.slice(0, 1) ?? '') : ''
+
+  // 区分色ドット: 社員=青 / パート=桃 / その他（アルバイト等）=グレー
+  const dotCls = (r: RosterEntry) =>
+    r.isRegular ? 'wg-dot-reg' : (r.kindLabel ?? '').includes('パート') ? 'wg-dot-part' : 'wg-dot-arb'
+
+  // 週合計（配置の実働時間・h）
+  const weekHours = (staffId: string): number => {
+    let min = 0
+    for (const d of week.days) {
+      for (const a of asgBy.get(`${staffId}|${d.date}`) ?? []) min += a.end_min - a.start_min
+    }
+    return Math.round((min / 60) * 10) / 10
+  }
+
+  return (
+    <>
+      <div className="filter-row">
+        <div className="month-nav">
+          <button
+            className="btn sm"
+            aria-label="前の週"
+            onClick={() =>
+              setWeekBase(new Date(weekBase.getFullYear(), weekBase.getMonth(), weekBase.getDate() - 7))
+            }
+          >
+            ←
+          </button>
+          <span className="month-label mono">{week.label}</span>
+          <button
+            className="btn sm"
+            aria-label="次の週"
+            onClick={() =>
+              setWeekBase(new Date(weekBase.getFullYear(), weekBase.getMonth(), weekBase.getDate() + 7))
+            }
+          >
+            →
+          </button>
+        </div>
+        <label className="field">
+          <span>店舗</span>
+          <select value={storeId} onChange={(e) => setStoreId(e.target.value)}>
+            {me.stores.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className="wg-legend">
+        <span><i className="wg-lg wg-lg-asg" />勤務</span>
+        <span><i className="wg-lg wg-lg-off" />公休</span>
+        <span><i className="wg-lg wg-lg-hopeoff" />希望休(×)</span>
+        <span><i className="wg-lg wg-lg-closed" />定休</span>
+        <span><i className="wg-lg wg-lg-empty" />未入力</span>
+      </div>
+
+      {(rosterQ.error || asgQ.error) && (
+        <p className="login-error" role="alert">
+          {errText(rosterQ.error ?? asgQ.error, 'シフト一覧を取得できませんでした')}
+        </p>
+      )}
+      {rosterQ.isPending && !!storeId && <p className="note">読み込み中…</p>}
+      {!rosterQ.isPending && roster.length === 0 && (
+        <p className="note">この店舗に表示できるスタッフがいません。</p>
+      )}
+
+      {roster.length > 0 && (
+        <div className="card table-wrap wg-wrap">
+          <table className="weekgrid-table">
+            <thead>
+              <tr>
+                <th className="wg-name">スタッフ</th>
+                {week.days.map((d) => {
+                  const holiday = holidaysQ.data?.get(d.date)
+                  const closed = closedDows.includes(d.dow)
+                  const cls = holiday || d.dow === 0 ? ' sun' : d.dow === 6 || d.dow === 5 ? ' sat' : ''
+                  return (
+                    <th key={d.date} className={`wg-day mono${cls}`} title={holiday ?? undefined}>
+                      {DOW_LABELS[d.dow]}
+                      {d.dayNum}
+                      {closed && <span className="wg-closed-badge">定休</span>}
+                    </th>
+                  )
+                })}
+                <th className="wg-total">週計</th>
+              </tr>
+            </thead>
+            <tbody>
+              {roster.map((r) => (
+                <tr key={r.staffId}>
+                  <td className="wg-name">
+                    <i className={`wg-dot ${dotCls(r)}`} />
+                    <b>{r.name}</b>
+                  </td>
+                  {week.days.map((d) => {
+                    const k = `${r.staffId}|${d.date}`
+                    // 優先度: 定休 > 公休 > 配置 > 希望 > 空
+                    if (closedDows.includes(d.dow)) {
+                      return (
+                        <td key={d.date} className="wg-cell wg-cell-closed">
+                          <span className="wg-closed">定休</span>
+                        </td>
+                      )
+                    }
+                    const off = offBy.get(k)
+                    if (off) {
+                      return (
+                        <td key={d.date} className="wg-cell">
+                          <span className="wg-off">休</span>
+                        </td>
+                      )
+                    }
+                    const asgs = asgBy.get(k)
+                    if (asgs && asgs.length > 0) {
+                      return (
+                        <td key={d.date} className="wg-cell">
+                          {asgs.map((a) => (
+                            <button
+                              key={a.id}
+                              type="button"
+                              className={`wg-asg${a.status === 'draft' ? ' is-draft' : ''}${canEdit ? '' : ' ro'}`}
+                              title={`${minToHHMM(a.start_min)}〜${minToHHMM(a.end_min)}${a.note ? ` ${a.note}` : ''}`}
+                              onClick={() => {
+                                if (canEdit) setEditing({ mode: 'edit', asg: a })
+                              }}
+                            >
+                              {compactTime(a.start_min)}-{compactTime(a.end_min)}
+                              {posInitial(a.position_id) && (
+                                <span className="wg-pos">{posInitial(a.position_id)}</span>
+                              )}
+                            </button>
+                          ))}
+                        </td>
+                      )
+                    }
+                    const av = availBy.get(k)
+                    if (av) {
+                      return (
+                        <td key={d.date} className="wg-cell">
+                          {av.kind === 'off' ? (
+                            <span className="wg-hopeoff">×</span>
+                          ) : (
+                            <span
+                              className="wg-hope"
+                              title={
+                                av.kind === 'partial'
+                                  ? `${minToHHMM(av.start_min)}〜${minToHHMM(av.end_min)}`
+                                  : '終日OK'
+                              }
+                            >
+                              {KIND_MARK[av.kind]}
+                            </span>
+                          )}
+                        </td>
+                      )
+                    }
+                    return (
+                      <td key={d.date} className="wg-cell">
+                        <span className="wg-empty">·</span>
+                      </td>
+                    )
+                  })}
+                  <td className="wg-total mono">{weekHours(r.staffId)}h</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <p className="note">
+        一覧は俯瞰用です。配置の作成は「シフト作成」、公休の設定は「公休」タブから行います。
+      </p>
+
+      {editing && storeId && (
+        <AsgEditorModal
+          storeId={storeId}
+          positions={positions.filter((p) => p.store_id === null || p.store_id === storeId)}
+          editing={editing}
+          onClose={() => setEditing(null)}
+        />
+      )}
+    </>
+  )
+}
 
 /* -------------------------- 管理者: 社員の公休 -------------------------- */
 

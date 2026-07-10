@@ -4325,3 +4325,171 @@ h3,
   border-radius: 4px;
   padding: 1px 5px;
 }
+
+/* 統合シフトグリッド（一覧タブ） */
+.wg-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.wg-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.wg-lg {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  display: inline-block;
+}
+
+.wg-lg-asg { background: var(--green-soft); border: 1px solid var(--green); }
+.wg-lg-off { background: var(--gold); }
+.wg-lg-hopeoff { background: var(--gold-soft); }
+.wg-lg-closed { background: #e5e5e5; }
+.wg-lg-empty { background: #f4f2ec; border: 1px solid var(--line); }
+
+.wg-wrap {
+  overflow-x: auto;
+}
+
+.weekgrid-table {
+  border-collapse: collapse;
+  font-size: 11.5px;
+  min-width: 640px;
+  width: 100%;
+}
+
+.weekgrid-table th,
+.weekgrid-table td {
+  border: 1px solid var(--line-2);
+  padding: 4px 6px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.weekgrid-table .wg-name {
+  position: sticky;
+  left: 0;
+  background: var(--card);
+  text-align: left;
+  min-width: 7em;
+  white-space: nowrap;
+  z-index: 2;
+}
+
+.weekgrid-table .wg-total {
+  position: sticky;
+  right: 0;
+  background: var(--card);
+  font-weight: 700;
+  min-width: 3.6em;
+  z-index: 2;
+}
+
+.weekgrid-table th.wg-day.sun { color: var(--red); }
+.weekgrid-table th.wg-day.sat { color: #1d4ed8; }
+
+.wg-closed-badge {
+  display: block;
+  font-size: 8.5px;
+  color: var(--muted);
+}
+
+.wg-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 5px;
+}
+
+.wg-dot-reg { background: #1d4ed8; }
+.wg-dot-part { background: #e879a0; }
+.wg-dot-arb { background: #9aa2af; }
+
+.wg-cell {
+  min-width: 4.2em;
+}
+
+.wg-cell-closed {
+  background: #f0f0ee;
+}
+
+.wg-closed {
+  font-size: 9.5px;
+  color: var(--muted);
+}
+
+.wg-off {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 20px;
+  border-radius: 5px;
+  background: var(--gold);
+  color: #241b06;
+  font-size: 10.5px;
+  font-weight: 900;
+}
+
+.wg-asg {
+  font-family: var(--mono);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 5px;
+  border-radius: 5px;
+  border: 1px solid var(--green);
+  background: var(--green-soft);
+  color: var(--green);
+  cursor: pointer;
+  margin: 1px 0;
+}
+
+.wg-asg.is-draft {
+  opacity: 0.55;
+  border-style: dashed;
+}
+
+.wg-asg.ro {
+  cursor: default;
+}
+
+.wg-pos {
+  font-family: var(--jp);
+  font-size: 9px;
+  font-weight: 400;
+}
+
+.wg-hope {
+  color: var(--green);
+  opacity: 0.55;
+  font-size: 11px;
+}
+
+.wg-hopeoff {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: var(--gold-soft);
+  color: #6b4e00;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.wg-empty {
+  color: var(--line);
+}
