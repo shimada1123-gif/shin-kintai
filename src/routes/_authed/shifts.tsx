@@ -853,6 +853,12 @@ function RequirementRowEditor({
   const posSum = Object.values(needByPos).reduce((s, v) => s + (v > 0 ? v : 0), 0)
   const need = hasPositions ? posSum : manualNeed
 
+  // 表示専用フォールバック: ポジション別未入力の行では保存済み need_count を見せる
+  // （save が書く値は従来どおり need。ここは数値表示のみで他の計算に流用しない）
+  const storedNeed = initial?.need_count ?? 0
+  const needFallback = hasPositions && posSum === 0 && storedNeed > 0
+  const displayNeed = needFallback ? storedNeed : need
+
   const save = useMutation({
     mutationFn: () =>
       upsertRequirement({
@@ -892,7 +898,7 @@ function RequirementRowEditor({
         <div className="req-need">
           <span className="req-lab">必要人数{hasPositions ? '（自動集計）' : ''}</span>
           {hasPositions ? (
-            <b className="mono req-total">{need}</b>
+            <b className="mono req-total">{displayNeed}</b>
           ) : (
             <Stepper value={manualNeed} onChange={setManualNeed} label={`${dayLabel}の必要人数`} />
           )}
@@ -921,6 +927,13 @@ function RequirementRowEditor({
           {save.isPending ? '保存中…' : '保存'}
         </button>
       </div>
+
+      {needFallback && (
+        <p className="note req-fallback-note">
+          ポジション別未設定（保存済み必要人数を表示中）。ポジション別を入力して保存してください。
+          未入力のまま保存すると0になります。
+        </p>
+      )}
 
       {hasPositions && (
         <div className="condrow pos-row">
