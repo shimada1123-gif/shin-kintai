@@ -74,6 +74,151 @@ export type Database = {
           },
         ]
       }
+      announcement_kinds: {
+        Row: {
+          announcement_id: string
+          employment_kind_id: string
+          id: string
+        }
+        Insert: {
+          announcement_id: string
+          employment_kind_id: string
+          id?: string
+        }
+        Update: {
+          announcement_id?: string
+          employment_kind_id?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "announcement_kinds_announcement_id_fkey"
+            columns: ["announcement_id"]
+            isOneToOne: false
+            referencedRelation: "announcements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "announcement_kinds_employment_kind_id_fkey"
+            columns: ["employment_kind_id"]
+            isOneToOne: false
+            referencedRelation: "employment_kinds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      announcement_reads: {
+        Row: {
+          announcement_id: string
+          id: string
+          read_at: string
+          user_id: string
+        }
+        Insert: {
+          announcement_id: string
+          id?: string
+          read_at?: string
+          user_id: string
+        }
+        Update: {
+          announcement_id?: string
+          id?: string
+          read_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "announcement_reads_announcement_id_fkey"
+            columns: ["announcement_id"]
+            isOneToOne: false
+            referencedRelation: "announcements"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      announcement_stores: {
+        Row: {
+          announcement_id: string
+          id: string
+          store_id: string
+        }
+        Insert: {
+          announcement_id: string
+          id?: string
+          store_id: string
+        }
+        Update: {
+          announcement_id?: string
+          id?: string
+          store_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "announcement_stores_announcement_id_fkey"
+            columns: ["announcement_id"]
+            isOneToOne: false
+            referencedRelation: "announcements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "announcement_stores_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      announcements: {
+        Row: {
+          author: string | null
+          body: string
+          created_at: string
+          deleted_at: string | null
+          deleted_by: string | null
+          id: string
+          importance: string
+          scope_type: string
+          tenant_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          author?: string | null
+          body: string
+          created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
+          id?: string
+          importance?: string
+          scope_type?: string
+          tenant_id: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          author?: string | null
+          body?: string
+          created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
+          id?: string
+          importance?: string
+          scope_type?: string
+          tenant_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "announcements_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       areas: {
         Row: {
           created_at: string
@@ -252,6 +397,47 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_deliveries: {
+        Row: {
+          announcement_id: string
+          created_at: string
+          email: string
+          error: string | null
+          id: string
+          sent_at: string | null
+          status: string
+          user_id: string | null
+        }
+        Insert: {
+          announcement_id: string
+          created_at?: string
+          email: string
+          error?: string | null
+          id?: string
+          sent_at?: string | null
+          status?: string
+          user_id?: string | null
+        }
+        Update: {
+          announcement_id?: string
+          created_at?: string
+          email?: string
+          error?: string | null
+          id?: string
+          sent_at?: string | null
+          status?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_deliveries_announcement_id_fkey"
+            columns: ["announcement_id"]
+            isOneToOne: false
+            referencedRelation: "announcements"
             referencedColumns: ["id"]
           },
         ]
@@ -935,6 +1121,8 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      app_announcement_manage: { Args: { aid: string }; Returns: boolean }
+      app_announcement_visible: { Args: { aid: string }; Returns: boolean }
       app_can_store: { Args: { sid: string }; Returns: boolean }
       app_has_perm: { Args: { perm: string; tid: string }; Returns: boolean }
       app_is_member: { Args: { tid: string }; Returns: boolean }

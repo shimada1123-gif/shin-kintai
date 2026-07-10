@@ -79,6 +79,12 @@ const PERM_DEFS: {
     desc: 'テストモード中にデモ打刻の作成・一括削除ができます。',
     enforcement: 'rls',
   },
+  {
+    key: 'announce_post',
+    label: '掲示板に投稿・お知らせ配信ができる',
+    desc: '掲示板へのお知らせ投稿・編集・削除ができます。宛先に選べるのは自分の管理店舗内のみです。',
+    enforcement: 'rls',
+  },
 ]
 
 function PermissionsPage() {

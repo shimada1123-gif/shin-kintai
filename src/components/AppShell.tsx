@@ -1,6 +1,7 @@
 import { Link, Outlet, useRouterState } from '@tanstack/react-router'
 import { useAuth } from '@/lib/auth'
 import { ROLE_LABEL, scopeLabel, useMe, type Role } from '@/lib/me-context'
+import { useUnreadAnnouncements } from '@/lib/queries/announcements'
 
 interface NavItem {
   to: string
@@ -13,6 +14,7 @@ const NAV: NavItem[] = [
   { to: '/punch', label: '打刻', roles: ['owner', 'area_manager', 'store_manager', 'staff'] },
   { to: '/attendance', label: '勤怠', roles: ['owner', 'area_manager', 'store_manager', 'staff'] },
   { to: '/shifts', label: 'シフト', roles: ['owner', 'area_manager', 'store_manager', 'staff'] },
+  { to: '/board', label: '掲示板', roles: ['owner', 'area_manager', 'store_manager', 'staff'] },
   { to: '/staff', label: 'スタッフ', roles: ['owner', 'area_manager', 'store_manager'] },
   { to: '/reports', label: 'レポート', roles: ['owner', 'area_manager'] },
   { to: '/users', label: 'ユーザー管理', roles: ['owner', 'area_manager', 'store_manager'] },
@@ -36,6 +38,8 @@ export function AppShell() {
   const { user, signOut } = useAuth()
   const { me } = useMe()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const unreadQ = useUnreadAnnouncements()
+  const unread = unreadQ.data ?? 0
 
   if (!me) return null
 
@@ -67,6 +71,11 @@ export function AppShell() {
             return (
               <Link key={item.to} to={item.to} className={`nav-item${active ? ' is-active' : ''}`}>
                 {item.label}
+                {item.to === '/board' && unread > 0 && (
+                  <span className="nav-badge" aria-label={`未読${unread}件`}>
+                    {unread > 99 ? '99+' : unread}
+                  </span>
+                )}
               </Link>
             )
           })}

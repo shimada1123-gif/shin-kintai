@@ -10,6 +10,7 @@ export type PermissionKey =
   | 'wage_individual_view'
   | 'payslip_view'
   | 'staff_master_edit'
+  | 'announce_post'
 
 /**
  * role_permissions を読んで権限を判定する。
