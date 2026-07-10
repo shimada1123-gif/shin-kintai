@@ -921,7 +921,7 @@ function TimeBandsCard({
     const e = eBase + (nextDay ? 1440 : 0)
     if (s >= 1440) throw new Error('開始は当日内にしてください。')
     if (e <= s) throw new Error('終了は開始より後にしてください。')
-    if (e > 1560) throw new Error('終了は翌2:00までにしてください。')
+    if (e > 1800) throw new Error('終了は翌6:00までにしてください。')
     return {
       store_id: storeId,
       name: name.trim(),
