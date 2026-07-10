@@ -46,8 +46,8 @@ const PERM_DEFS: {
   {
     key: 'shift_edit',
     label: 'シフトを編集できる',
-    desc: 'シフトの作成・変更ができます（Phase 3 で使用）。',
-    enforcement: 'ui',
+    desc: 'シフト希望の一覧閲覧・代理入力、シフトの作成・変更ができます。',
+    enforcement: 'rls',
   },
   {
     key: 'labor_cost_view',

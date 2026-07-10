@@ -2085,6 +2085,251 @@ input[type='datetime-local'] {
   min-width: 180px;
 }
 
+/* ---------- シフト希望（カレンダー / マトリクス） ---------- */
+.month-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.month-label {
+  font-size: 15px;
+  font-weight: 700;
+  min-width: 110px;
+  text-align: center;
+}
+
+.avail-summary {
+  max-width: 360px;
+  margin-bottom: 14px;
+}
+
+.cal-card {
+  padding: 12px;
+}
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.cal-dow {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  text-align: center;
+  padding: 4px 0;
+}
+
+.cal-dow.sun,
+.cal-num.sun {
+  color: var(--red);
+}
+
+.cal-dow.sat,
+.cal-num.sat {
+  color: #2b5d9c;
+}
+
+.cal-day {
+  min-height: 74px;
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  background: var(--card);
+  padding: 5px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  cursor: pointer;
+  font-family: var(--jp);
+  text-align: left;
+  transition: 0.1s;
+}
+
+.cal-day:hover {
+  border-color: var(--gold);
+  background: #fffdf7;
+}
+
+.cal-day.blank {
+  border: none;
+  background: transparent;
+  cursor: default;
+}
+
+.cal-num {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.cal-holiday {
+  font-size: 8.5px;
+  color: var(--red);
+  line-height: 1.2;
+  word-break: keep-all;
+}
+
+.cal-mark {
+  margin-top: auto;
+  align-self: center;
+}
+
+.av-chip {
+  font-size: 17px;
+  font-weight: 900;
+  line-height: 1.1;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.av-chip.av-ok {
+  color: var(--green);
+}
+
+.av-chip.av-ng {
+  color: var(--muted);
+}
+
+.av-chip.av-part {
+  color: #9a6e12;
+}
+
+.av-time {
+  font-size: 8.5px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+/* ○△× の選択ボタン */
+.kind-pick {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.kind-pick-btn {
+  font-family: var(--jp);
+  font-size: 13.5px;
+  font-weight: 900;
+  padding: 14px 6px;
+  border-radius: 9px;
+  border: 1.5px solid var(--line);
+  background: var(--card);
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: 0.1s;
+}
+
+.kind-pick-btn.on.kp-avail {
+  border-color: var(--green);
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.kind-pick-btn.on.kp-partial {
+  border-color: var(--gold);
+  background: var(--gold-soft);
+  color: #7a5a10;
+}
+
+.kind-pick-btn.on.kp-off {
+  border-color: var(--red);
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+/* 管理者マトリクス */
+.matrix-table {
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.matrix-table .mx-name {
+  position: sticky;
+  left: 0;
+  background: var(--card);
+  min-width: 110px;
+  white-space: nowrap;
+  z-index: 1;
+  box-shadow: 1px 0 0 var(--line);
+}
+
+.matrix-table th.mx-day {
+  padding: 4px 2px;
+  min-width: 34px;
+  text-align: center;
+  font-size: 11px;
+}
+
+.mx-dow {
+  display: block;
+  font-size: 8.5px;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+th.mx-day.sun,
+th.mx-day.sun .mx-dow {
+  color: var(--red);
+}
+
+th.mx-day.sat,
+th.mx-day.sat .mx-dow {
+  color: #2b5d9c;
+}
+
+.mx-cell {
+  padding: 0;
+  text-align: center;
+  border-bottom: 1px solid var(--line-2);
+}
+
+.mx-btn {
+  width: 100%;
+  min-width: 34px;
+  min-height: 38px;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 900;
+  cursor: pointer;
+  color: var(--line);
+  border-radius: 5px;
+}
+
+.mx-btn:hover {
+  background: var(--gold-soft);
+}
+
+.mx-cell.mx-avail .mx-btn {
+  color: var(--green);
+}
+
+.mx-cell.mx-partial .mx-btn {
+  color: #9a6e12;
+}
+
+.mx-cell.mx-off .mx-btn {
+  color: var(--red);
+}
+
+@media (max-width: 480px) {
+  .cal-day {
+    min-height: 60px;
+    padding: 3px 4px;
+  }
+
+  .av-time {
+    display: none;
+  }
+}
+
 /* ---------- 権限設定グリッド ---------- */
 .perm-table {
   min-width: 560px; /* スマホでは .table-wrap 内で横スクロール */

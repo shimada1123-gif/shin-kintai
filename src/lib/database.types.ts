@@ -490,6 +490,195 @@ export type Database = {
           },
         ]
       }
+      shift_assignments: {
+        Row: {
+          created_at: string
+          end_min: number
+          id: string
+          note: string | null
+          position_id: string | null
+          staff_id: string
+          start_min: number
+          status: string
+          store_id: string
+          tenant_id: string
+          updated_at: string
+          weight_half: boolean
+          work_date: string
+        }
+        Insert: {
+          created_at?: string
+          end_min: number
+          id?: string
+          note?: string | null
+          position_id?: string | null
+          staff_id: string
+          start_min: number
+          status?: string
+          store_id: string
+          tenant_id: string
+          updated_at?: string
+          weight_half?: boolean
+          work_date: string
+        }
+        Update: {
+          created_at?: string
+          end_min?: number
+          id?: string
+          note?: string | null
+          position_id?: string | null
+          staff_id?: string
+          start_min?: number
+          status?: string
+          store_id?: string
+          tenant_id?: string
+          updated_at?: string
+          weight_half?: boolean
+          work_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shift_assignments_position_id_fkey"
+            columns: ["position_id"]
+            isOneToOne: false
+            referencedRelation: "positions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shift_assignments_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shift_assignments_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shift_assignments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shift_availability: {
+        Row: {
+          created_at: string
+          end_min: number | null
+          id: string
+          kind: string
+          note: string | null
+          staff_id: string
+          start_min: number | null
+          store_id: string
+          tenant_id: string
+          updated_at: string
+          work_date: string
+        }
+        Insert: {
+          created_at?: string
+          end_min?: number | null
+          id?: string
+          kind?: string
+          note?: string | null
+          staff_id: string
+          start_min?: number | null
+          store_id: string
+          tenant_id: string
+          updated_at?: string
+          work_date: string
+        }
+        Update: {
+          created_at?: string
+          end_min?: number | null
+          id?: string
+          kind?: string
+          note?: string | null
+          staff_id?: string
+          start_min?: number | null
+          store_id?: string
+          tenant_id?: string
+          updated_at?: string
+          work_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shift_availability_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shift_availability_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shift_availability_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shift_requirements: {
+        Row: {
+          created_at: string
+          day_type: string
+          id: string
+          memo: string | null
+          min_by_kind: Json
+          need_count: number
+          store_id: string
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          day_type: string
+          id?: string
+          memo?: string | null
+          min_by_kind?: Json
+          need_count?: number
+          store_id: string
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          day_type?: string
+          id?: string
+          memo?: string | null
+          min_by_kind?: Json
+          need_count?: number
+          store_id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shift_requirements_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shift_requirements_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       staff: {
         Row: {
           created_at: string
@@ -748,6 +937,7 @@ export type Database = {
       app_is_member: { Args: { tid: string }; Returns: boolean }
       app_role: { Args: { tid: string }; Returns: string }
       app_staff_id: { Args: { tid: string }; Returns: string }
+      app_staff_see_corr: { Args: { tid: string }; Returns: boolean }
       app_tenant_test_mode: { Args: { tid: string }; Returns: boolean }
       seed_role_permissions: { Args: { tid: string }; Returns: undefined }
     }
