@@ -1424,6 +1424,7 @@ export type Database = {
           employment_kind_id: string
           full_name: string
           is_newbie: boolean
+          is_regular: boolean
           is_trainer: boolean
           kind_label: string
           position_default_id: string

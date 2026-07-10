@@ -20,6 +20,7 @@ import {
   type OfferRow,
 } from '@/lib/queries/offers'
 import {
+  closedDowsOf,
   fetchEmploymentKinds,
   fetchPositions,
   fetchStaffList,
@@ -27,12 +28,15 @@ import {
   type TimeBand,
 } from '@/lib/queries/master'
 import {
+  addStaffDayOff,
   asgErrText,
   availErrText,
   createAssignment,
   DAY_TYPES,
   deleteAssignment,
   deleteAvailability,
+  fetchStaffDayOffs,
+  removeStaffDayOff,
   fetchAssignments,
   fetchHolidays,
   fetchMyAvailability,
@@ -56,6 +60,7 @@ import {
   type RequirementRow,
   type RosterEntry,
   type ShiftAsg,
+  type StaffDayOffRow,
 } from '@/lib/queries/shifts'
 import { ymd } from '@/lib/worktime'
 
@@ -103,7 +108,7 @@ function ShiftsPage() {
 
   const canEdit = perms.has('shift_edit')
   const hasSelf = !!me?.staffId
-  const [tab, setTab] = useState<'matrix' | 'build' | 'req' | 'mine' | 'myshift'>('mine')
+  const [tab, setTab] = useState<'matrix' | 'build' | 'req' | 'dayoff' | 'mine' | 'myshift'>('mine')
 
   // 権限が確定したら初期タブを決める（管理者はマトリクスが主）
   useEffect(() => {
@@ -150,6 +155,12 @@ function ShiftsPage() {
           <button className={`tab${tab === 'req' ? ' on' : ''}`} onClick={() => setTab('req')}>
             必要人数
           </button>
+          <button
+            className={`tab${tab === 'dayoff' ? ' on' : ''}`}
+            onClick={() => setTab('dayoff')}
+          >
+            公休
+          </button>
           {hasSelf && (
             <>
               <button className={`tab${tab === 'mine' ? ' on' : ''}`} onClick={() => setTab('mine')}>
@@ -186,6 +197,8 @@ function ShiftsPage() {
         <BuildView />
       ) : tab === 'req' && canEdit ? (
         <RequirementsView />
+      ) : tab === 'dayoff' && canEdit ? (
+        <StaffDayOffView />
       ) : tab === 'matrix' && canEdit ? (
         <MatrixView />
       ) : hasSelf ? (
@@ -575,6 +588,154 @@ function AvailEditorModal({
 }
 
 /* -------------------------- 管理者: 希望マトリクス -------------------------- */
+
+/* -------------------------- 管理者: 社員の公休 -------------------------- */
+
+function StaffDayOffView() {
+  const { me } = useMe()
+  const qc = useQueryClient()
+  const [storeId, setStoreId] = useState('')
+  const [month, setMonth] = useState(() => {
+    const n = new Date()
+    return new Date(n.getFullYear(), n.getMonth(), 1)
+  })
+  const [error, setError] = useState<string | null>(null)
+  const meta = useMemo(() => monthMeta(month), [month])
+
+  useEffect(() => {
+    if (!storeId && me?.stores.length) setStoreId(me.stores[0].id)
+  }, [me?.stores, storeId])
+
+  // 0023: is_regular つきロースター（definer・賃金権限に依存しない）
+  const rosterQ = useQuery({
+    queryKey: ['store_roster', storeId],
+    enabled: !!storeId,
+    queryFn: () => fetchStoreRoster(storeId),
+  })
+  const dayoffQ = useQuery({
+    queryKey: ['staff_dayoff', storeId, meta.from],
+    enabled: !!storeId,
+    queryFn: () => fetchStaffDayOffs(storeId, meta.from, meta.to),
+  })
+  const holidaysQ = useQuery({
+    queryKey: ['holidays', meta.from],
+    queryFn: () => fetchHolidays(meta.from, meta.to),
+  })
+
+  const invalidate = () => void qc.invalidateQueries({ queryKey: ['staff_dayoff'] })
+  const addMut = useMutation({
+    mutationFn: addStaffDayOff,
+    onSuccess: invalidate,
+    onError: (e) =>
+      setError(
+        errText(e, '公休を保存できませんでした（シフト編集権限と自店であることが必要です）'),
+      ),
+  })
+  const delMut = useMutation({
+    mutationFn: removeStaffDayOff,
+    onSuccess: invalidate,
+    onError: (e) => setError(errText(e, '公休を取り消せませんでした')),
+  })
+
+  if (!me) return null
+
+  const store = me.stores.find((s) => s.id === storeId)
+  const closedDows = store ? closedDowsOf(store) : []
+  const regulars = (rosterQ.data ?? []).filter((r) => r.isRegular)
+  const holidays = holidaysQ.data ?? new Map<string, string>()
+
+  const offsByStaff = new Map<string, Map<string, StaffDayOffRow>>()
+  for (const o of dayoffQ.data ?? []) {
+    const m = offsByStaff.get(o.staff_id) ?? new Map<string, StaffDayOffRow>()
+    m.set(o.work_date, o)
+    offsByStaff.set(o.staff_id, m)
+  }
+  const dowOf = (date: string) => new Date(`${date}T00:00:00`).getDay()
+
+  return (
+    <>
+      <div className="filter-row">
+        <MonthNav month={month} label={meta.label} onChange={setMonth} />
+        <label className="field">
+          <span>店舗</span>
+          <select value={storeId} onChange={(e) => setStoreId(e.target.value)}>
+            {me.stores.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <p className="note">
+        社員（社員区分）の公休を日付タップで設定します。定休日は店全体の休みとして自動表示され、
+        個別の公休には数えません。
+      </p>
+
+      {error && (
+        <p className="login-error" role="alert">
+          {error}
+        </p>
+      )}
+      {rosterQ.isPending && !!storeId && <p className="note">読み込み中…</p>}
+      {rosterQ.error && (
+        <p className="login-error" role="alert">
+          {errText(rosterQ.error, '社員の取得に失敗しました')}
+        </p>
+      )}
+
+      {!rosterQ.isPending && regulars.length === 0 && (
+        <p className="note">
+          この店舗に社員がいません。設定は不要です（アルバイト・パートのみ）。
+        </p>
+      )}
+
+      {regulars.map((r) => {
+        const offs = offsByStaff.get(r.staffId) ?? new Map<string, StaffDayOffRow>()
+        const count = [...offs.keys()].filter((d) => !closedDows.includes(dowOf(d))).length
+        return (
+          <div key={r.staffId} className="dayoff-block">
+            <div className="dayoff-head">
+              <b>{r.name}</b>
+              {r.kindLabel && <span className="muted-tag">{r.kindLabel}</span>}
+              {count === 0 ? (
+                <span className="badge dayoff-unset">未設定</span>
+              ) : (
+                <span className="mono dayoff-count">公休 {count}日</span>
+              )}
+            </div>
+            <Calendar
+              meta={meta}
+              holidays={holidays}
+              cellOf={(date) => {
+                if (closedDows.includes(dowOf(date))) {
+                  return <span className="cal-closed">定休</span>
+                }
+                return offs.has(date) ? <span className="dayoff-mark">休</span> : null
+              }}
+              onTap={(date) => {
+                if (closedDows.includes(dowOf(date))) return // 定休日は個別公休の対象外
+                setError(null)
+                const off = offs.get(date)
+                if (off) {
+                  delMut.mutate(off.id)
+                } else {
+                  addMut.mutate({
+                    tenantId: me.tenantId,
+                    staffId: r.staffId,
+                    storeId,
+                    workDate: date,
+                  })
+                }
+              }}
+            />
+          </div>
+        )
+      })}
+    </>
+  )
+}
 
 function MatrixView() {
   const { me } = useMe()

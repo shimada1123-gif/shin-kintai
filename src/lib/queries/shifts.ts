@@ -79,6 +79,8 @@ export interface RosterEntry {
   staffId: string
   name: string
   kindLabel: string | null
+  /** 社員区分か（employment_kinds.is_regular・0022/0023） */
+  isRegular: boolean
 }
 
 /**
@@ -97,6 +99,7 @@ export async function fetchStoreRoster(storeId: string): Promise<RosterEntry[]> 
     staffId: r.staff_id,
     name: r.full_name,
     kindLabel: r.kind_label ?? null,
+    isRegular: r.is_regular === true,
   }))
   rows.sort((a, b) => a.name.localeCompare(b.name, 'ja'))
   return rows
@@ -525,6 +528,65 @@ export const hhmmToMin = (v: string): number | null => {
   const [h, m] = v.split(':').map(Number)
   if (!Number.isFinite(h) || !Number.isFinite(m)) return null
   return h * 60 + m
+}
+
+/* ---------- 社員の公休（staff_day_off・0022） ---------- */
+
+export interface StaffDayOffRow {
+  id: string
+  staff_id: string
+  work_date: string
+  kind: string
+}
+
+/** その店・期間の公休。sdo_sel（管理者=自店全件 / 本人=自分の分）に従う */
+export async function fetchStaffDayOffs(
+  storeId: string,
+  fromDay: string,
+  toDay: string,
+): Promise<StaffDayOffRow[]> {
+  const supabase = await getSupabase()
+  const { data, error } = await supabase
+    .from('staff_day_off')
+    .select('id, staff_id, work_date, kind')
+    .eq('store_id', storeId)
+    .gte('work_date', fromDay)
+    .lte('work_date', toDay)
+  if (error) throw error
+  return data ?? []
+}
+
+/** 公休を追加。防壁は sdo_write（shift_edit ∧ 自店）。戻り値=作成した行の id */
+export async function addStaffDayOff(a: {
+  tenantId: string
+  staffId: string
+  storeId: string
+  workDate: string
+  kind?: 'public' | 'paid' | 'other'
+}): Promise<string> {
+  const supabase = await getSupabase()
+  const id = crypto.randomUUID()
+  const { data, error } = await supabase
+    .from('staff_day_off')
+    .insert({
+      id,
+      tenant_id: a.tenantId,
+      staff_id: a.staffId,
+      store_id: a.storeId,
+      work_date: a.workDate,
+      kind: a.kind ?? 'public',
+    })
+    .select('id')
+    .single()
+  if (error) throw error
+  return data.id
+}
+
+/** 公休の取り消し。防壁は sdo_write */
+export async function removeStaffDayOff(id: string): Promise<void> {
+  const supabase = await getSupabase()
+  const { error } = await supabase.from('staff_day_off').delete().eq('id', id)
+  if (error) throw error
 }
 
 /* ---------- 確定と通知の分離（0017 notified_at・サーバ関数ラッパー） ---------- */
