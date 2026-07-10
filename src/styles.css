@@ -3530,3 +3530,18 @@ h3,
   margin-top: 14px;
   padding: 18px;
 }
+
+/* シフト確定→掲示板通知（γ） */
+.publish-notify {
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.publish-notify input:disabled + span {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.publish-notify .note {
+  margin-left: 4px;
+}

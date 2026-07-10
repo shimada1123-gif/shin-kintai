@@ -2,8 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { errText } from '@/lib/errors'
+import { useAuth } from '@/lib/auth'
 import { useMe } from '@/lib/me-context'
 import { usePermissions } from '@/lib/perm'
+import { annErrText, createAnnouncement } from '@/lib/queries/announcements'
+import { sendAnnouncementMail } from '@/lib/server/announce-mail'
 import { fetchEmploymentKinds, fetchPositions, fetchStaffList } from '@/lib/queries/master'
 import {
   asgErrText,
@@ -998,11 +1001,14 @@ function dayTypeOf(dow: number, isHoliday: boolean): DayType {
 
 function BuildView() {
   const { me } = useMe()
+  const { user } = useAuth()
+  const { has } = usePermissions()
   const qc = useQueryClient()
   const [storeId, setStoreId] = useState('')
   const [weekBase, setWeekBase] = useState(() => new Date())
   const [pubMsg, setPubMsg] = useState<string | null>(null)
   const [pubErr, setPubErr] = useState<string | null>(null)
+  const [notify, setNotify] = useState(false)
   const [editing, setEditing] = useState<
     | { mode: 'create'; date: string; staffId: string; staffName: string; avail: AvailRow | null }
     | { mode: 'edit'; asg: ShiftAsg }
@@ -1010,11 +1016,49 @@ function BuildView() {
   >(null)
   const week = useMemo(() => weekMeta(weekBase), [weekBase])
 
+  const canAnnounce = has('announce_post')
+
   const publish = useMutation({
-    mutationFn: () => publishWeek(storeId, week.from, week.to),
-    onSuccess: (n) => {
-      setPubMsg(`${n} 件のシフトを確定・公開しました ✓`)
+    mutationFn: async (): Promise<string> => {
+      const n = await publishWeek(storeId, week.from, week.to)
+      let msg = `${n} 件のシフトを確定・公開しました ✓`
+
+      // 通知は best-effort: 失敗しても確定・公開は成立したまま（ロールバックしない）
+      if (notify && canAnnounce && user && me) {
+        const storeName = me.stores.find((s) => s.id === storeId)?.name ?? '店舗'
+        try {
+          const annId = await createAnnouncement(me.tenantId, user.id, {
+            title: `${week.label}のシフトが確定しました`,
+            body: [
+              `${week.label} の ${storeName} のシフトが確定しました。`,
+              'マイシフトで自分の勤務予定をご確認ください。',
+              'https://kintai.worldwave.workers.dev/shifts',
+            ].join('\n'),
+            importance: 'important',
+            scopeType: 'stores',
+            storeIds: [storeId],
+            kindIds: [],
+          })
+          try {
+            const r = await sendAnnouncementMail({ data: { announcement_id: annId } })
+            const extras: string[] = []
+            if (r.failed > 0) extras.push(`失敗 ${r.failed} 件`)
+            if (r.skipped > 0) extras.push(`アドレス未登録 ${r.skipped} 件`)
+            msg += ` 掲示板に投稿し、${r.sent}人にメールを送信しました${extras.length > 0 ? `（${extras.join('・')}）` : ''}`
+          } catch (e) {
+            msg += ` 掲示板に投稿しました（メール送信は失敗：${annErrText(e, '送信エラー')}）`
+          }
+        } catch (e) {
+          msg += `（掲示板への通知に失敗：${annErrText(e, '投稿エラー')}）`
+        }
+      }
+      return msg
+    },
+    onSuccess: (msg) => {
+      setPubMsg(msg)
       void qc.invalidateQueries({ queryKey: ['shift_asg'] })
+      void qc.invalidateQueries({ queryKey: ['announcements'] })
+      void qc.invalidateQueries({ queryKey: ['ann_unread'] })
     },
     onError: (e) => setPubErr(asgErrText(e)),
   })
@@ -1099,9 +1143,11 @@ function BuildView() {
             onClick={() => {
               setPubMsg(null)
               setPubErr(null)
+              const notifyNote =
+                notify && canAnnounce ? '\n掲示板への投稿と対象店舗スタッフへのメール送信も行います。' : ''
               if (
                 confirm(
-                  `${week.label} のシフトを確定して公開しますか？\n公開後はスタッフのマイシフトに表示されます（スタッフは直接編集できません）。`,
+                  `${week.label} のシフトを確定して公開しますか？\n公開後はスタッフのマイシフトに表示されます（スタッフは直接編集できません）。${notifyNote}`,
                 )
               ) {
                 publish.mutate()
@@ -1110,6 +1156,20 @@ function BuildView() {
           >
             {publish.isPending ? '公開中…' : `この週を確定・公開（下書き ${draftCount} 件）`}
           </button>
+        )}
+        {draftCount > 0 && (
+          <label className="target-check publish-notify">
+            <input
+              type="checkbox"
+              checked={notify && canAnnounce}
+              disabled={!canAnnounce || publish.isPending}
+              onChange={(e) => setNotify(e.target.checked)}
+            />
+            <span>
+              掲示板で通知＋メール送信する
+              {!canAnnounce && <span className="note">（掲示板投稿権限が必要です）</span>}
+            </span>
+          </label>
         )}
         {draftCount === 0 && pubCount > 0 && <span className="pub-badge">公開済み</span>}
         {draftCount > 0 && pubCount > 0 && (
