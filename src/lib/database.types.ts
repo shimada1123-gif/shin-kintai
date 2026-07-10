@@ -448,6 +448,7 @@ export type Database = {
           created_at: string
           id: string
           is_hourly: boolean
+          is_regular: boolean
           label: string
           requires_clock: boolean
           tenant_id: string
@@ -457,6 +458,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_hourly?: boolean
+          is_regular?: boolean
           label: string
           requires_clock?: boolean
           tenant_id: string
@@ -466,6 +468,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_hourly?: boolean
+          is_regular?: boolean
           label?: string
           requires_clock?: boolean
           tenant_id?: string
@@ -1196,6 +1199,64 @@ export type Database = {
           },
           {
             foreignKeyName: "staff_assignments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_day_off: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          kind: string
+          note: string | null
+          staff_id: string
+          store_id: string
+          tenant_id: string
+          work_date: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind?: string
+          note?: string | null
+          staff_id: string
+          store_id: string
+          tenant_id: string
+          work_date: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind?: string
+          note?: string | null
+          staff_id?: string
+          store_id?: string
+          tenant_id?: string
+          work_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_day_off_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_day_off_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_day_off_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"

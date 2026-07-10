@@ -4237,3 +4237,45 @@ h3,
   color: var(--muted);
   opacity: 0.7;
 }
+
+/* 社員区分トグル・定休日チップ（0022） */
+.ek-regular {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10.5px;
+  color: var(--muted);
+  margin-left: 6px;
+  cursor: pointer;
+}
+
+.ek-regular input {
+  accent-color: var(--indigo);
+  width: 13px;
+  height: 13px;
+}
+
+.dow-chips {
+  display: flex;
+  gap: 4px;
+}
+
+.dow-chip {
+  font-family: var(--jp);
+  font-size: 12px;
+  font-weight: 700;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  cursor: pointer;
+  transition: 0.12s;
+}
+
+.dow-chip.on {
+  border-color: var(--red);
+  background: var(--red-soft);
+  color: var(--red);
+}

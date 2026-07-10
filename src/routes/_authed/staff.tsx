@@ -9,6 +9,7 @@ import { useDebounced } from '@/lib/hooks'
 import { useMe } from '@/lib/me-context'
 import { usePermissions } from '@/lib/perm'
 import {
+  closedDowsOf,
   createEmploymentKind,
   createPosition,
   createStaff,
@@ -23,6 +24,8 @@ import {
   fetchStoresPage,
   fetchTimeBands,
   saveStore,
+  updateEmploymentKind,
+  updateStoreClosedDows,
   type Assignment,
   type StaffWithDetails,
   type Store,
@@ -596,9 +599,14 @@ function StoreForm({
     }
   }
 
+  // 定休日（stores.settings.closed_dows）。既存店の編集時のみ設定可（新規は作成後に）
+  const [closedDows, setClosedDows] = useState<number[]>(store ? closedDowsOf(store) : [])
+  const toggleDow = (d: number) =>
+    setClosedDows((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]))
+
   const save = useMutation({
-    mutationFn: () =>
-      saveStore({
+    mutationFn: async () => {
+      await saveStore({
         id: store?.id,
         tenant_id: tenantId,
         name,
@@ -607,7 +615,12 @@ function StoreForm({
         lng,
         geofence_radius_m: radius ?? 80,
         gps_policy: policy,
-      }),
+      })
+      // 定休日は settings のマージ更新（他キー非破壊）。既存店のみ
+      if (store?.id) {
+        await updateStoreClosedDows(store.id, closedDows)
+      }
+    },
     onSuccess: onDone,
     onError: (e) => setError(errText(e, '店舗の保存に失敗しました')),
   })
@@ -680,6 +693,26 @@ function StoreForm({
             <option value="block">ブロック（圏外は打刻不可）</option>
           </select>
         </label>
+        {store && (
+          <div className="field dow-field">
+            <span>定休日</span>
+            <div className="dow-chips">
+              {['日', '月', '火', '水', '木', '金', '土'].map((lab, d) => (
+                <button
+                  key={d}
+                  type="button"
+                  className={`dow-chip${closedDows.includes(d) ? ' on' : ''}`}
+                  onClick={() => toggleDow(d)}
+                >
+                  {lab}
+                </button>
+              ))}
+            </div>
+            <span className="note">
+              毎週この曜日は店を閉めます。全員休みになり、シフトも組みません。
+            </span>
+          </div>
+        )}
       </div>
       <p className="note">
         緯度・経度は店舗の位置（GPS打刻の中心）です。住所を入れて「住所から座標を取得」を
@@ -706,7 +739,13 @@ function EmploymentKindsCard({
   canEdit,
 }: {
   tenantId: string
-  kinds: { id: string; label: string; requires_clock: boolean; applies_premium: boolean }[]
+  kinds: {
+    id: string
+    label: string
+    requires_clock: boolean
+    applies_premium: boolean
+    is_regular: boolean
+  }[]
   loading: boolean
   canEdit: boolean
 }) {
@@ -735,6 +774,13 @@ function EmploymentKindsCard({
     onError: (e) => setError(errText(e, '区分の削除に失敗しました')),
   })
 
+  const regMut = useMutation({
+    mutationFn: (a: { id: string; is_regular: boolean }) =>
+      updateEmploymentKind(a.id, { is_regular: a.is_regular }),
+    onSuccess: invalidate,
+    onError: (e) => setError(errText(e, '社員区分の更新に失敗しました')),
+  })
+
   return (
     <div className="card">
       <div className="card-title">雇用区分</div>
@@ -751,6 +797,21 @@ function EmploymentKindsCard({
           <span key={k.id} className="tagchip">
             {k.label}
             {!k.requires_clock && <span className="chip-note">打刻なし</span>}
+            <label
+              className="ek-regular"
+              title="社員区分は、自動シフトの前に公休設定が必要になります"
+            >
+              <input
+                type="checkbox"
+                checked={k.is_regular}
+                disabled={!canEdit || regMut.isPending}
+                onChange={(e) => {
+                  setError(null)
+                  regMut.mutate({ id: k.id, is_regular: e.target.checked })
+                }}
+              />
+              <span>社員</span>
+            </label>
             {canEdit && (
               <span className="x" role="button" onClick={() => del.mutate(k.id)}>
                 ×
@@ -759,6 +820,10 @@ function EmploymentKindsCard({
           </span>
         ))}
       </div>
+
+      <p className="note">
+        「社員」にした区分のスタッフは、自動シフトの前に公休設定が必要になります。
+      </p>
 
       {canEdit && (
         <div className="inline-add">

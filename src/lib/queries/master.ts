@@ -324,6 +324,44 @@ export async function deleteEmploymentKind(id: string): Promise<void> {
   if (error) throw error
 }
 
+/** 区分の部分更新（is_regular=社員区分フラグ等）。防壁は ek_write=staff_master_edit */
+export async function updateEmploymentKind(
+  id: string,
+  patch: { is_regular?: boolean },
+): Promise<void> {
+  const supabase = await getSupabase()
+  const { error } = await supabase.from('employment_kinds').update(patch).eq('id', id)
+  if (error) throw error
+}
+
+/** stores.settings から定休日（closed_dows: 0=日〜6=土）を安全に読む */
+export function closedDowsOf(store: Store): number[] {
+  const s = store.settings as { closed_dows?: unknown } | null
+  return Array.isArray(s?.closed_dows)
+    ? (s.closed_dows as unknown[]).filter((n): n is number => typeof n === 'number')
+    : []
+}
+
+/**
+ * 定休日の保存。settings の他キーを消さないよう「現値を読んで closed_dows だけマージ」で更新する。
+ * 防壁は stores_all=owner。
+ */
+export async function updateStoreClosedDows(storeId: string, closedDows: number[]): Promise<void> {
+  const supabase = await getSupabase()
+  const { data: cur, error: selErr } = await supabase
+    .from('stores')
+    .select('settings')
+    .eq('id', storeId)
+    .maybeSingle()
+  if (selErr) throw selErr
+  const merged = {
+    ...((cur?.settings as Record<string, unknown> | null) ?? {}),
+    closed_dows: [...closedDows].sort(),
+  }
+  const { error } = await supabase.from('stores').update({ settings: merged }).eq('id', storeId)
+  if (error) throw error
+}
+
 /** 作成した行の id を返す（追加直後にセレクトで選択するため） */
 export async function createPosition(
   tenantId: string,
