@@ -7,12 +7,14 @@ import { useMe } from '@/lib/me-context'
 import { usePermissions } from '@/lib/perm'
 import { annErrText, createAnnouncement } from '@/lib/queries/announcements'
 import { sendAnnouncementMail } from '@/lib/server/announce-mail'
-import { createOffers } from '@/lib/server/offer-create'
 import {
   cancelOffer,
   confirmOfferRecipient,
+  createDraftOffers,
   fetchOfferRecipients,
   fetchOffers,
+  previewDraftOffers,
+  sendDraftOffers,
   type OfferRecipientRow,
   type OfferRow,
 } from '@/lib/queries/offers'
@@ -1153,6 +1155,31 @@ function BuildView() {
     return m
   }, [offRecQ.data])
 
+  // 下書きオファー（未送信）の集計と一斉送信（フェーズ②）
+  const [draftPanelOpen, setDraftPanelOpen] = useState(false)
+  const [draftMsg, setDraftMsg] = useState<string | null>(null)
+  const [draftErr, setDraftErr] = useState<string | null>(null)
+  const draftPrevQ = useQuery({
+    queryKey: ['offer_draft_preview', storeId],
+    enabled: !!storeId,
+    queryFn: () => previewDraftOffers(storeId),
+  })
+  const sendDrafts = useMutation({
+    mutationFn: () => sendDraftOffers(storeId),
+    onSuccess: (r) => {
+      setDraftMsg(
+        `${r.sent_mails}通送信 / ${r.offers_opened}枠を公開` +
+          (r.skipped_overdue > 0 ? ` / 締切切れ ${r.skipped_overdue}件スキップ` : '') +
+          (r.skipped_no_email > 0 ? ` / メール未登録 ${r.skipped_no_email}件` : ''),
+      )
+      setDraftPanelOpen(false)
+      void qc.invalidateQueries({ queryKey: ['offers'] })
+      void qc.invalidateQueries({ queryKey: ['offer_recipients'] })
+      void qc.invalidateQueries({ queryKey: ['offer_draft_preview'] })
+    },
+    onError: (e) => setDraftErr(errText(e, '一斉送信に失敗しました')),
+  })
+
   if (!me) return null
 
   const positions = (posQ.data ?? []).filter((p) => p.store_id === null || p.store_id === storeId)
@@ -1248,6 +1275,61 @@ function BuildView() {
         )}
       </div>
 
+      {(draftPrevQ.data?.total_offers ?? 0) > 0 && (
+        <div className="draft-offers-panel">
+          <div className="dop-head">
+            <b>
+              未送信の下書きオファー: {draftPrevQ.data!.total_offers}枠・
+              {draftPrevQ.data!.recipients.length}名
+            </b>
+            <button className="btn sm" onClick={() => setDraftPanelOpen((v) => !v)}>
+              {draftPanelOpen ? '閉じる' : 'まとめて送信'}
+            </button>
+          </div>
+          {draftPanelOpen && (
+            <>
+              <div className="dop-list">
+                {draftPrevQ.data!.recipients.map((r) => (
+                  <span key={r.staff_id} className="dop-rec">
+                    {r.staff_name}…{r.count}件
+                    {!r.has_email && (
+                      <em className="dop-warn">メール未登録のため送信されません</em>
+                    )}
+                  </span>
+                ))}
+              </div>
+              <button
+                className="btn-dl publish-btn"
+                disabled={sendDrafts.isPending}
+                onClick={() => {
+                  setDraftMsg(null)
+                  setDraftErr(null)
+                  if (
+                    confirm(
+                      `下書き ${draftPrevQ.data!.total_offers}枠 を一斉送信します（スタッフ1人につき1通にまとめます）。よろしいですか？`,
+                    )
+                  ) {
+                    sendDrafts.mutate()
+                  }
+                }}
+              >
+                {sendDrafts.isPending ? '送信中…' : 'この内容で一斉送信'}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+      {draftMsg && (
+        <p className="board-info" role="status">
+          {draftMsg}
+        </p>
+      )}
+      {draftErr && (
+        <p className="login-error" role="alert">
+          {draftErr}
+        </p>
+      )}
+
       {(asgQ.error || availQ.error) && (
         <p className="login-error" role="alert">
           {asgErrText(asgQ.error ?? availQ.error)}
@@ -1314,25 +1396,29 @@ function BuildView() {
                         recs.find((r) => r.response === 'confirmed')?.staff_name ?? null
                       const overdue = o.status === 'open' && new Date(o.deadline_at) < new Date()
                       const cls =
-                        o.status === 'filled'
-                          ? 'oc-filled'
-                          : o.status === 'cancelled'
-                            ? 'oc-cancelled'
-                            : o.status === 'expired'
-                              ? 'oc-expired'
-                              : appliedN > 0
-                                ? 'oc-attn'
-                                : 'oc-open'
+                        o.status === 'draft'
+                          ? 'oc-draft'
+                          : o.status === 'filled'
+                            ? 'oc-filled'
+                            : o.status === 'cancelled'
+                              ? 'oc-cancelled'
+                              : o.status === 'expired'
+                                ? 'oc-expired'
+                                : appliedN > 0
+                                  ? 'oc-attn'
+                                  : 'oc-open'
                       const badge =
-                        o.status === 'filled'
-                          ? `確定：${winner ?? '確定済み'}${winner ? 'さん' : ''}`
-                          : o.status === 'cancelled'
-                            ? '取消'
-                            : o.status === 'expired'
-                              ? '期限切れ'
-                              : appliedN > 0
-                                ? `申請 ${appliedN}件・確認待ち`
-                                : '募集中（承諾待ち）'
+                        o.status === 'draft'
+                          ? '下書き（未送信）'
+                          : o.status === 'filled'
+                            ? `確定：${winner ?? '確定済み'}${winner ? 'さん' : ''}`
+                            : o.status === 'cancelled'
+                              ? '取消'
+                              : o.status === 'expired'
+                                ? '期限切れ'
+                                : appliedN > 0
+                                  ? `申請 ${appliedN}件・確認待ち`
+                                  : '募集中（承諾待ち）'
                       return (
                         <button
                           key={o.id}
@@ -1499,6 +1585,7 @@ function BuildView() {
 }
 
 const OFFER_STATUS_LABEL: Record<OfferRow['status'], string> = {
+  draft: '下書き（未送信）',
   open: '募集中',
   filled: '確定済み',
   cancelled: '取消',
@@ -1734,6 +1821,7 @@ function AddStaffModal({
   const toggle = (list: string[], v: string): string[] =>
     list.includes(v) ? list.filter((x) => x !== v) : [...list, v]
 
+  const qcModal = useQueryClient()
   const send = useMutation({
     mutationFn: async () => {
       const s = hhmmToMin(offStart)
@@ -1747,28 +1835,30 @@ function AddStaffModal({
       if (Number.isNaN(dl.getTime()) || dl.getTime() <= Date.now()) {
         throw new Error('締切は未来の日時にしてください。')
       }
-      return createOffers({
-        data: {
-          store_id: storeId,
-          drafts: [...offDates].sort().map((d) => ({
-            work_date: d,
-            position_id: offPos || null,
-            start_min: s,
-            end_min: e,
-            deadline_at: dl.toISOString(),
-            staff_ids: offStaff,
-          })),
-        },
+      // フェーズ②: 下書き保存のみ（メール0通）。送信は週ビューの「まとめて送信」から
+      return createDraftOffers({
+        store_id: storeId,
+        drafts: [...offDates].sort().map((d) => ({
+          work_date: d,
+          position_id: offPos || null,
+          start_min: s,
+          end_min: e,
+          deadline_at: dl.toISOString(),
+          staff_ids: offStaff,
+        })),
       })
     },
     onSuccess: (r) => {
       setOffMsg(
-        `作成 ${r.created_offers}枠 / 招待 ${r.invited}名 / メール送信 ${r.mail_ok}件` +
-          (r.mail_failed > 0 ? `・失敗 ${r.mail_failed}件` : '') +
-          (r.skipped.length > 0 ? ` / スキップ ${r.skipped.length}件` : ''),
+        `下書きに保存しました：${r.created_offers}枠 / 招待予定 ${r.invited}名` +
+          (r.skipped.length > 0 ? ` / スキップ ${r.skipped.length}件` : '') +
+          '（メールはまだ送信されていません）',
       )
+      void qcModal.invalidateQueries({ queryKey: ['offers'] })
+      void qcModal.invalidateQueries({ queryKey: ['offer_recipients'] })
+      void qcModal.invalidateQueries({ queryKey: ['offer_draft_preview'] })
     },
-    onError: (e) => setOffErr(e instanceof Error ? e.message : '送信に失敗しました。'),
+    onError: (e) => setOffErr(e instanceof Error ? e.message : '保存に失敗しました。'),
   })
 
   const availBy = new Map(avails.map((r) => [r.staff_id, r]))
@@ -1908,7 +1998,8 @@ function AddStaffModal({
             </div>
 
             <p className="note">
-              招待メールの承諾は<b>申請</b>として集まり、確定はあなたの承認（確定操作）後です。
+              ここでは<b>下書きに保存</b>され、あとで週ビューの「まとめて送信」から一斉送信します。
+              承諾は<b>申請</b>として集まり、確定はあなたの承認（確定操作）後です。
             </p>
 
             <div className="mbtns">
@@ -1923,14 +2014,14 @@ function AddStaffModal({
                   setOffMsg(null)
                   if (
                     confirm(
-                      `${firstLabel}〜 ${offDates.length}枠に ${offStaff.length}名へオファーを送ります。よろしいですか？`,
+                      `${firstLabel}〜 ${offDates.length}枠を下書き保存します（この時点ではメールは送られません）。よろしいですか？`,
                     )
                   ) {
                     send.mutate()
                   }
                 }}
               >
-                {send.isPending ? '送信中…' : 'オファーを送信'}
+                {send.isPending ? '保存中…' : '下書きに保存'}
               </button>
             </div>
           </div>

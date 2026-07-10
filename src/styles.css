@@ -3929,3 +3929,52 @@ h3,
 .badge.resp-badge-declined { background: #eee; color: var(--muted); }
 .badge.resp-badge-confirmed { background: var(--green-soft); color: var(--green); }
 .badge.resp-badge-superseded { background: #eee; color: var(--muted); }
+
+/* 下書きオファー: チップとパネル（フェーズ②） */
+.offer-chip.oc-draft {
+  border-style: dotted;
+  background: #f2f1ee;
+  color: var(--muted);
+}
+
+.offer-chip.oc-draft .oc-badge {
+  color: var(--muted);
+}
+
+.draft-offers-panel {
+  border: 1px dashed var(--gold);
+  background: var(--gold-soft);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+
+.dop-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+.dop-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 10px 0;
+  font-size: 12.5px;
+}
+
+.dop-rec {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dop-warn {
+  font-style: normal;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--red);
+}

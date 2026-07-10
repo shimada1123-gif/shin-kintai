@@ -1,5 +1,14 @@
 import { getSupabase } from '@/lib/auth/supabase-client'
-import { confirmOffer } from '@/lib/server/offer-create'
+import {
+  confirmOffer,
+  createDraftOffers as createDraftOffersSrv,
+  previewDraftOffers as previewDraftOffersSrv,
+  sendDraftOffers as sendDraftOffersSrv,
+  type CreateDraftOffersResult,
+  type OfferDraftInput,
+  type PreviewDraftOffersResult,
+  type SendDraftOffersResult,
+} from '@/lib/server/offer-create'
 
 /**
  * オファー（shift_offers / shift_offer_recipients）の閲覧・確定・取消。
@@ -9,7 +18,7 @@ import { confirmOffer } from '@/lib/server/offer-create'
  * - 取消: so_write（shift_edit ∧ 自店）。RETURNING×RLS を避けるため .select() は付けない
  */
 
-export type OfferStatus = 'open' | 'filled' | 'cancelled' | 'expired'
+export type OfferStatus = 'draft' | 'open' | 'filled' | 'cancelled' | 'expired'
 export type OfferResponse = 'pending' | 'applied' | 'declined' | 'confirmed' | 'superseded'
 
 export interface OfferRow {
@@ -96,4 +105,26 @@ export interface ConfirmOutcome {
 export async function confirmOfferRecipient(recipientId: string): Promise<ConfirmOutcome> {
   const r = await confirmOffer({ data: { recipient_id: recipientId } })
   return { ok: r.ok, reason: r.reason, overlapWarning: r.overlapWarning }
+}
+
+/* ---------- フェーズ②: 下書き→一斉送信（サーバ関数ラッパー） ---------- */
+
+export type { CreateDraftOffersResult, PreviewDraftOffersResult, SendDraftOffersResult }
+
+/** 下書きオファー作成（メール0通）。宛先・トークンはサーバ側で用意される */
+export async function createDraftOffers(input: {
+  store_id: string
+  drafts: OfferDraftInput[]
+}): Promise<CreateDraftOffersResult> {
+  return createDraftOffersSrv({ data: input })
+}
+
+/** 送信前プレビュー（送らない）。スタッフ別の枠数と email 有無 */
+export async function previewDraftOffers(storeId: string): Promise<PreviewDraftOffersResult> {
+  return previewDraftOffersSrv({ data: { store_id: storeId } })
+}
+
+/** 下書きの一斉送信（1人1通に集約）。締切切れは draft のまま残る */
+export async function sendDraftOffers(storeId: string): Promise<SendDraftOffersResult> {
+  return sendDraftOffersSrv({ data: { store_id: storeId } })
 }

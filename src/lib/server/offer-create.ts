@@ -459,3 +459,331 @@ export const confirmOffer = createServerFn({ method: 'POST' })
       superseded_mail_sent: supersededSent,
     }
   })
+
+/* -------------------- フェーズ②: 下書きに溜める → まとめて一斉送信（1人1通） -------------------- */
+
+export interface CreateDraftOffersResult {
+  created_offers: number
+  invited: number
+  skipped: { work_date: string; reason: string }[]
+}
+
+/**
+ * 下書きオファー作成。createOffers と同形だがメールを一切送らない（0通）。
+ * 仮トークンの生値は破棄する（一斉送信時に再生成して token_hash を更新するため保存不要）。
+ */
+export const createDraftOffers = createServerFn({ method: 'POST' })
+  .inputValidator((d: { store_id: string; drafts: OfferDraftInput[] }) => {
+    assert(typeof d.store_id === 'string' && d.store_id, '店舗が指定されていません。')
+    assert(Array.isArray(d.drafts) && d.drafts.length > 0, 'オファー枠がありません。')
+    assert(d.drafts.length <= 31, '一度に作成できる枠は31件までです。')
+    for (const dr of d.drafts) {
+      assert(
+        typeof dr.work_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dr.work_date),
+        '日付の形式が不正です。',
+      )
+      assert(Array.isArray(dr.staff_ids), '招待するスタッフの指定が不正です。')
+      assert(dr.staff_ids.length <= 100, '一度に招待できるのは100名までです。')
+    }
+    return d
+  })
+  .handler(async ({ data }): Promise<CreateDraftOffersResult> => {
+    const caller = await requireCaller()
+    const admin = getAdminClient()
+    const { tenantId } = await assertShiftEditForStore(admin, caller, data.store_id)
+
+    const allStaffIds = [...new Set(data.drafts.flatMap((d) => d.staff_ids))]
+    const staffById = new Map<string, { email: string | null }>()
+    if (allStaffIds.length > 0) {
+      const { data: staffRows, error } = await admin
+        .from('staff')
+        .select('id, email')
+        .eq('tenant_id', tenantId)
+        .in('id', allStaffIds)
+      assert(!error, 'スタッフ情報の取得に失敗しました。')
+      for (const s of staffRows ?? []) staffById.set(s.id, { email: s.email })
+    }
+
+    const result: CreateDraftOffersResult = { created_offers: 0, invited: 0, skipped: [] }
+
+    for (const dr of data.drafts) {
+      if (
+        !Number.isInteger(dr.start_min) ||
+        !Number.isInteger(dr.end_min) ||
+        dr.start_min < 0 ||
+        dr.end_min > 1440 ||
+        dr.start_min >= dr.end_min
+      ) {
+        result.skipped.push({ work_date: dr.work_date, reason: '時間帯が不正です' })
+        continue
+      }
+      const deadline = new Date(dr.deadline_at)
+      if (!dr.deadline_at || Number.isNaN(deadline.getTime()) || deadline.getTime() <= Date.now()) {
+        result.skipped.push({ work_date: dr.work_date, reason: '締切が過去か不正です' })
+        continue
+      }
+      const staffIds = [...new Set(dr.staff_ids)].filter((id) => staffById.has(id))
+      const unknown = new Set(dr.staff_ids).size - staffIds.length
+      if (unknown > 0) {
+        result.skipped.push({ work_date: dr.work_date, reason: `対象外のスタッフ ${unknown} 名を除外` })
+      }
+      if (staffIds.length === 0) {
+        result.skipped.push({ work_date: dr.work_date, reason: '招待するスタッフがいません' })
+        continue
+      }
+
+      const offerId = crypto.randomUUID()
+      const { error: offErr } = await admin.from('shift_offers').insert({
+        id: offerId,
+        tenant_id: tenantId,
+        store_id: data.store_id,
+        work_date: dr.work_date,
+        position_id: dr.position_id,
+        start_min: dr.start_min,
+        end_min: dr.end_min,
+        weight_half: false,
+        status: 'draft',
+        deadline_at: deadline.toISOString(),
+        created_by: caller.userId,
+      })
+      if (offErr) {
+        result.skipped.push({ work_date: dr.work_date, reason: `枠の作成に失敗（${offErr.code ?? 'DB'}）` })
+        continue
+      }
+      result.created_offers++
+
+      for (const staffId of staffIds) {
+        const staff = staffById.get(staffId)!
+        // 仮トークン（生値は即破棄。送信時に再生成して hash を差し替える）
+        const tokenHash = await sha256Hex(generateOfferToken())
+        const { error: recErr } = await admin.from('shift_offer_recipients').insert({
+          id: crypto.randomUUID(),
+          offer_id: offerId,
+          staff_id: staffId,
+          token_hash: tokenHash,
+          response: 'pending',
+          email: staff.email,
+        })
+        if (!recErr) result.invited++
+      }
+    }
+
+    return result
+  })
+
+export interface DraftPreviewRecipient {
+  staff_id: string
+  staff_name: string
+  email: string | null
+  count: number
+  has_email: boolean
+}
+
+export interface PreviewDraftOffersResult {
+  total_offers: number
+  recipients: DraftPreviewRecipient[]
+}
+
+/** 送信前プレビュー（送らない）。その店の下書き枠をスタッフ別に集約して返す */
+export const previewDraftOffers = createServerFn({ method: 'POST' })
+  .inputValidator((d: { store_id: string }) => {
+    assert(typeof d.store_id === 'string' && d.store_id, '店舗が指定されていません。')
+    return d
+  })
+  .handler(async ({ data }): Promise<PreviewDraftOffersResult> => {
+    const caller = await requireCaller()
+    const admin = getAdminClient()
+    const { tenantId } = await assertShiftEditForStore(admin, caller, data.store_id)
+
+    const { data: offers, error: offErr } = await admin
+      .from('shift_offers')
+      .select('id')
+      .eq('store_id', data.store_id)
+      .eq('status', 'draft')
+    assert(!offErr, '下書きの取得に失敗しました。')
+    const offerIds = (offers ?? []).map((o) => o.id)
+    if (offerIds.length === 0) return { total_offers: 0, recipients: [] }
+
+    const { data: recs, error: recErr } = await admin
+      .from('shift_offer_recipients')
+      .select('staff_id, email')
+      .in('offer_id', offerIds)
+    assert(!recErr, '招待予定の取得に失敗しました。')
+
+    const byStaff = new Map<string, { email: string | null; count: number }>()
+    for (const r of recs ?? []) {
+      const cur = byStaff.get(r.staff_id) ?? { email: r.email, count: 0 }
+      cur.count++
+      if (!cur.email && r.email) cur.email = r.email
+      byStaff.set(r.staff_id, cur)
+    }
+
+    const nameById = new Map<string, string>()
+    if (byStaff.size > 0) {
+      const { data: staffRows } = await admin
+        .from('staff')
+        .select('id, full_name')
+        .eq('tenant_id', tenantId)
+        .in('id', [...byStaff.keys()])
+      for (const s of staffRows ?? []) nameById.set(s.id, s.full_name)
+    }
+
+    const recipients: DraftPreviewRecipient[] = [...byStaff.entries()]
+      .map(([staffId, v]) => ({
+        staff_id: staffId,
+        staff_name: nameById.get(staffId) ?? '(不明)',
+        email: v.email,
+        count: v.count,
+        has_email: !!v.email,
+      }))
+      .sort((a, b) => a.staff_name.localeCompare(b.staff_name, 'ja'))
+
+    return { total_offers: offerIds.length, recipients }
+  })
+
+export interface SendDraftOffersResult {
+  sent_mails: number
+  offers_opened: number
+  skipped_overdue: number
+  skipped_no_email: number
+}
+
+/**
+ * 下書きの一斉送信（唯一メールが飛ぶ関数）。スタッフ1人につき1通に集約。
+ * - 締切を再検証し、過ぎた枠は送らず draft のまま残す（expire_due は open のみ対象のためここで弾く）
+ * - 生トークンは送信時に新規生成 → token_hash を更新 → メール本文にのみ使用（DB非保存・ログ非出力）
+ * - メールが1人でも送れた offer は open 化。全員送れなかった offer は draft のまま
+ */
+export const sendDraftOffers = createServerFn({ method: 'POST' })
+  .inputValidator((d: { store_id: string }) => {
+    assert(typeof d.store_id === 'string' && d.store_id, '店舗が指定されていません。')
+    return d
+  })
+  .handler(async ({ data }): Promise<SendDraftOffersResult> => {
+    const caller = await requireCaller()
+    const admin = getAdminClient()
+    const { tenantId, storeName } = await assertShiftEditForStore(admin, caller, data.store_id)
+
+    const { data: offers, error: offErr } = await admin
+      .from('shift_offers')
+      .select('id, work_date, start_min, end_min, position_id, deadline_at')
+      .eq('store_id', data.store_id)
+      .eq('status', 'draft')
+    assert(!offErr, '下書きの取得に失敗しました。')
+
+    const now = Date.now()
+    const sendable = (offers ?? []).filter((o) => new Date(o.deadline_at).getTime() > now)
+    const result: SendDraftOffersResult = {
+      sent_mails: 0,
+      offers_opened: 0,
+      skipped_overdue: (offers ?? []).length - sendable.length,
+      skipped_no_email: 0,
+    }
+    if (sendable.length === 0) return result
+
+    const posIds = [...new Set(sendable.map((o) => o.position_id).filter((p): p is string => !!p))]
+    const posNameById = new Map<string, string>()
+    if (posIds.length > 0) {
+      const { data: posRows } = await admin
+        .from('positions')
+        .select('id, name')
+        .eq('tenant_id', tenantId)
+        .in('id', posIds)
+      for (const p of posRows ?? []) posNameById.set(p.id, p.name)
+    }
+    const offerById = new Map(sendable.map((o) => [o.id, o]))
+
+    const { data: recs, error: recErr } = await admin
+      .from('shift_offer_recipients')
+      .select('id, offer_id, staff_id, email')
+      .in(
+        'offer_id',
+        sendable.map((o) => o.id),
+      )
+    assert(!recErr, '招待予定の取得に失敗しました。')
+
+    interface MailItem {
+      recId: string
+      offerId: string
+      workDate: string
+      startMin: number
+      endMin: number
+      positionName: string | null
+      token: string
+    }
+    const byEmail = new Map<string, MailItem[]>()
+
+    for (const r of recs ?? []) {
+      if (!r.email) {
+        result.skipped_no_email++
+        continue
+      }
+      const off = offerById.get(r.offer_id)
+      if (!off) continue
+      // 生トークンを新規生成して hash を差し替え（生値はメール本文にのみ使う）
+      const token = generateOfferToken()
+      const tokenHash = await sha256Hex(token)
+      const { error: updErr } = await admin
+        .from('shift_offer_recipients')
+        .update({ token_hash: tokenHash })
+        .eq('id', r.id)
+      if (updErr) continue
+      const list = byEmail.get(r.email) ?? []
+      list.push({
+        recId: r.id,
+        offerId: r.offer_id,
+        workDate: off.work_date,
+        startMin: off.start_min,
+        endMin: off.end_min,
+        positionName: off.position_id ? (posNameById.get(off.position_id) ?? null) : null,
+        token,
+      })
+      byEmail.set(r.email, list)
+    }
+
+    const openedOffers = new Set<string>()
+    for (const [email, items] of byEmail) {
+      items.sort((a, b) => a.workDate.localeCompare(b.workDate) || a.startMin - b.startMin)
+      const blocks = items.map((i) => {
+        const d = dateLabel(i.workDate)
+        return [
+          `${d.full} ${minToHHMM(i.startMin)}〜${minToHHMM(i.endMin)}${i.positionName ? ` ${i.positionName}` : ''}`,
+          `参加（コメント可）: ${BASE_URL}/offer/accept?t=${i.token}`,
+          `不参加: ${BASE_URL}/offer/decline?t=${i.token}`,
+        ].join('\n')
+      })
+      const text = [
+        `${storeName}からシフトのお願いです。ご都合の合う枠があればご回答ください。`,
+        '',
+        blocks.join('\n\n'),
+        '',
+        '※先着ではありません。締切後に店舗が確認して確定します。',
+        '',
+        '— SHIN勤怠 からの自動送信です。',
+      ].join('\n')
+
+      const res = await sendMail(email, `【SHIN勤怠】シフトのお願い（${items.length}件）`, text)
+      if (res.ok) {
+        result.sent_mails++
+        await admin
+          .from('shift_offer_recipients')
+          .update({ sent_at: new Date().toISOString() })
+          .in(
+            'id',
+            items.map((i) => i.recId),
+          )
+        for (const i of items) openedOffers.add(i.offerId)
+      }
+    }
+
+    if (openedOffers.size > 0) {
+      const { error: openErr } = await admin
+        .from('shift_offers')
+        .update({ status: 'open' })
+        .in('id', [...openedOffers])
+        .eq('status', 'draft')
+      if (!openErr) result.offers_opened = openedOffers.size
+    }
+
+    return result
+  })
