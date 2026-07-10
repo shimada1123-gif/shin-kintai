@@ -16,6 +16,7 @@ const NAV: NavItem[] = [
   { to: '/staff', label: 'スタッフ', roles: ['owner', 'area_manager', 'store_manager'] },
   { to: '/reports', label: 'レポート', roles: ['owner', 'area_manager'] },
   { to: '/users', label: 'ユーザー管理', roles: ['owner', 'area_manager', 'store_manager'] },
+  { to: '/permissions', label: '権限', roles: ['owner'] },
   { to: '/settings', label: '設定', roles: ['owner'] },
 ]
 
