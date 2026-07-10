@@ -1115,7 +1115,7 @@ function BuildView() {
     queryKey: ['holidays', week.from, 'wk'],
     queryFn: () => fetchHolidays(week.from, week.to),
   })
-  // 所属スタッフ（希望に関わらず直接配置する候補）。RLS: wage_individual_view が無い役割では空
+  // 所属スタッフ（希望に関わらず直接配置する候補）。0012 definer 関数経由＝賃金権限に依存しない
   const rosterQ = useQuery({
     queryKey: ['store_roster', storeId],
     enabled: !!storeId,
@@ -1420,9 +1420,7 @@ function AddStaffModal({
 
         {rosterLoading && <p className="note">読み込み中…</p>}
         {!rosterLoading && roster.length === 0 && (
-          <p className="note">
-            追加できるスタッフがいません（所属スタッフの取得には個人賃金の閲覧権限が必要です）。
-          </p>
+          <p className="note">追加できるスタッフがいません。</p>
         )}
 
         <div className="roster-list">

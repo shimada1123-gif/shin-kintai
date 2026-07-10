@@ -1130,6 +1130,19 @@ export type Database = {
       app_role: { Args: { tid: string }; Returns: string }
       app_staff_id: { Args: { tid: string }; Returns: string }
       app_staff_see_corr: { Args: { tid: string }; Returns: boolean }
+      app_store_roster: {
+        Args: { p_store_id: string }
+        Returns: {
+          employment_kind_id: string
+          full_name: string
+          is_newbie: boolean
+          is_trainer: boolean
+          kind_label: string
+          position_default_id: string
+          requires_clock: boolean
+          staff_id: string
+        }[]
+      }
       app_tenant_test_mode: { Args: { tid: string }; Returns: boolean }
       seed_role_permissions: { Args: { tid: string }; Returns: undefined }
     }

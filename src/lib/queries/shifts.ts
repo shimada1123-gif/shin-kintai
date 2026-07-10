@@ -82,30 +82,22 @@ export interface RosterEntry {
 }
 
 /**
- * 店舗の所属スタッフ（有効所属 ∧ 在籍 ∧ 打刻対象の区分のみ。業務委託 requires_clock=false は除外）。
+ * 店舗の所属スタッフ（有効所属 ∧ 在籍 ∧ 打刻対象の区分のみ。業務委託と区分未設定は対象外）。
  * 希望の有無に関わらず直接配置する「＋スタッフを追加」の候補リスト用。
- * 注意: staff_assignments の RLS（sa_sel）は wage_individual_view or 本人のみ閲覧可のため、
- * wage_individual_view を持たない役割では候補が返らない（owner / area_manager は既定で可）。
+ * 賃金列を返さない definer 関数（0012 app_store_roster）を rpc で呼ぶため、
+ * 個人賃金閲覧権限（wage_individual_view）が無い店長でも候補が取れる。
+ * 絞り込み（is_active・在籍・requires_clock・app_can_store）はすべてサーバー側。
  */
 export async function fetchStoreRoster(storeId: string): Promise<RosterEntry[]> {
   const supabase = await getSupabase()
-  const { data, error } = await supabase
-    .from('staff_assignments')
-    .select(
-      'staff_id, is_active, staff:staff_id (full_name, status), kind:employment_kind_id (label, requires_clock)',
-    )
-    .eq('store_id', storeId)
-    .eq('is_active', true)
+  const { data, error } = await supabase.rpc('app_store_roster', { p_store_id: storeId })
   if (error) throw error
 
-  const rows: RosterEntry[] = []
-  for (const r of data ?? []) {
-    const staff = r.staff as { full_name: string; status: string } | null
-    const kind = r.kind as { label: string; requires_clock: boolean } | null
-    if (!staff || staff.status !== 'active') continue
-    if (kind && kind.requires_clock === false) continue // 業務委託などは配置対象外
-    rows.push({ staffId: r.staff_id, name: staff.full_name, kindLabel: kind?.label ?? null })
-  }
+  const rows: RosterEntry[] = (data ?? []).map((r) => ({
+    staffId: r.staff_id,
+    name: r.full_name,
+    kindLabel: r.kind_label ?? null,
+  }))
   rows.sort((a, b) => a.name.localeCompare(b.name, 'ja'))
   return rows
 }
