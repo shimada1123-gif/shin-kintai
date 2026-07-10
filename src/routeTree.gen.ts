@@ -12,6 +12,8 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as AuthedIndexRouteImport } from './routes/_authed/index'
+import { Route as OfferDeclineRouteImport } from './routes/offer.decline'
+import { Route as OfferAcceptRouteImport } from './routes/offer.accept'
 import { Route as DisplayStoreIdRouteImport } from './routes/display.$storeId'
 import { Route as AuthedUsersRouteImport } from './routes/_authed/users'
 import { Route as AuthedStaffRouteImport } from './routes/_authed/staff'
@@ -37,6 +39,16 @@ const AuthedIndexRoute = AuthedIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AuthedRoute,
+} as any)
+const OfferDeclineRoute = OfferDeclineRouteImport.update({
+  id: '/offer/decline',
+  path: '/offer/decline',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OfferAcceptRoute = OfferAcceptRouteImport.update({
+  id: '/offer/accept',
+  path: '/offer/accept',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const DisplayStoreIdRoute = DisplayStoreIdRouteImport.update({
   id: '/display/$storeId',
@@ -106,6 +118,8 @@ export interface FileRoutesByFullPath {
   '/staff': typeof AuthedStaffRoute
   '/users': typeof AuthedUsersRoute
   '/display/$storeId': typeof DisplayStoreIdRoute
+  '/offer/accept': typeof OfferAcceptRoute
+  '/offer/decline': typeof OfferDeclineRoute
   '/board/$annId': typeof AuthedBoardAnnIdRoute
   '/board/': typeof AuthedBoardIndexRoute
 }
@@ -120,6 +134,8 @@ export interface FileRoutesByTo {
   '/staff': typeof AuthedStaffRoute
   '/users': typeof AuthedUsersRoute
   '/display/$storeId': typeof DisplayStoreIdRoute
+  '/offer/accept': typeof OfferAcceptRoute
+  '/offer/decline': typeof OfferDeclineRoute
   '/': typeof AuthedIndexRoute
   '/board/$annId': typeof AuthedBoardAnnIdRoute
   '/board': typeof AuthedBoardIndexRoute
@@ -137,6 +153,8 @@ export interface FileRoutesById {
   '/_authed/staff': typeof AuthedStaffRoute
   '/_authed/users': typeof AuthedUsersRoute
   '/display/$storeId': typeof DisplayStoreIdRoute
+  '/offer/accept': typeof OfferAcceptRoute
+  '/offer/decline': typeof OfferDeclineRoute
   '/_authed/': typeof AuthedIndexRoute
   '/_authed/board/$annId': typeof AuthedBoardAnnIdRoute
   '/_authed/board/': typeof AuthedBoardIndexRoute
@@ -155,6 +173,8 @@ export interface FileRouteTypes {
     | '/staff'
     | '/users'
     | '/display/$storeId'
+    | '/offer/accept'
+    | '/offer/decline'
     | '/board/$annId'
     | '/board/'
   fileRoutesByTo: FileRoutesByTo
@@ -169,6 +189,8 @@ export interface FileRouteTypes {
     | '/staff'
     | '/users'
     | '/display/$storeId'
+    | '/offer/accept'
+    | '/offer/decline'
     | '/'
     | '/board/$annId'
     | '/board'
@@ -185,6 +207,8 @@ export interface FileRouteTypes {
     | '/_authed/staff'
     | '/_authed/users'
     | '/display/$storeId'
+    | '/offer/accept'
+    | '/offer/decline'
     | '/_authed/'
     | '/_authed/board/$annId'
     | '/_authed/board/'
@@ -194,6 +218,8 @@ export interface RootRouteChildren {
   AuthedRoute: typeof AuthedRouteWithChildren
   LoginRoute: typeof LoginRoute
   DisplayStoreIdRoute: typeof DisplayStoreIdRoute
+  OfferAcceptRoute: typeof OfferAcceptRoute
+  OfferDeclineRoute: typeof OfferDeclineRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -218,6 +244,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof AuthedIndexRouteImport
       parentRoute: typeof AuthedRoute
+    }
+    '/offer/decline': {
+      id: '/offer/decline'
+      path: '/offer/decline'
+      fullPath: '/offer/decline'
+      preLoaderRoute: typeof OfferDeclineRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/offer/accept': {
+      id: '/offer/accept'
+      path: '/offer/accept'
+      fullPath: '/offer/accept'
+      preLoaderRoute: typeof OfferAcceptRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/display/$storeId': {
       id: '/display/$storeId'
@@ -334,6 +374,8 @@ const rootRouteChildren: RootRouteChildren = {
   AuthedRoute: AuthedRouteWithChildren,
   LoginRoute: LoginRoute,
   DisplayStoreIdRoute: DisplayStoreIdRoute,
+  OfferAcceptRoute: OfferAcceptRoute,
+  OfferDeclineRoute: OfferDeclineRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

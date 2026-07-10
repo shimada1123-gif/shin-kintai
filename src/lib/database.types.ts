@@ -817,6 +817,143 @@ export type Database = {
           },
         ]
       }
+      shift_offer_recipients: {
+        Row: {
+          comment: string | null
+          created_at: string
+          email: string | null
+          id: string
+          offer_id: string
+          responded_at: string | null
+          response: string
+          sent_at: string | null
+          staff_id: string
+          token_hash: string
+        }
+        Insert: {
+          comment?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          offer_id: string
+          responded_at?: string | null
+          response?: string
+          sent_at?: string | null
+          staff_id: string
+          token_hash: string
+        }
+        Update: {
+          comment?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          offer_id?: string
+          responded_at?: string | null
+          response?: string
+          sent_at?: string | null
+          staff_id?: string
+          token_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shift_offer_recipients_offer_id_fkey"
+            columns: ["offer_id"]
+            isOneToOne: false
+            referencedRelation: "shift_offers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shift_offer_recipients_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shift_offers: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          deadline_at: string
+          end_min: number
+          filled_at: string | null
+          id: string
+          note: string | null
+          position_id: string | null
+          start_min: number
+          status: string
+          store_id: string
+          tenant_id: string
+          weight_half: boolean
+          winner_staff_id: string | null
+          work_date: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deadline_at: string
+          end_min: number
+          filled_at?: string | null
+          id?: string
+          note?: string | null
+          position_id?: string | null
+          start_min: number
+          status?: string
+          store_id: string
+          tenant_id: string
+          weight_half?: boolean
+          winner_staff_id?: string | null
+          work_date: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deadline_at?: string
+          end_min?: number
+          filled_at?: string | null
+          id?: string
+          note?: string | null
+          position_id?: string | null
+          start_min?: number
+          status?: string
+          store_id?: string
+          tenant_id?: string
+          weight_half?: boolean
+          winner_staff_id?: string | null
+          work_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shift_offers_position_id_fkey"
+            columns: ["position_id"]
+            isOneToOne: false
+            referencedRelation: "positions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shift_offers_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shift_offers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shift_offers_winner_staff_id_fkey"
+            columns: ["winner_staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       shift_requirements: {
         Row: {
           created_at: string
@@ -1127,6 +1264,13 @@ export type Database = {
       app_can_store: { Args: { sid: string }; Returns: boolean }
       app_has_perm: { Args: { perm: string; tid: string }; Returns: boolean }
       app_is_member: { Args: { tid: string }; Returns: boolean }
+      app_offer_accept: {
+        Args: { p_comment: string; p_token: string }
+        Returns: Json
+      }
+      app_offer_confirm: { Args: { p_recipient_id: string }; Returns: Json }
+      app_offer_decline: { Args: { p_token: string }; Returns: Json }
+      app_offer_expire_due: { Args: never; Returns: number }
       app_role: { Args: { tid: string }; Returns: string }
       app_staff_id: { Args: { tid: string }; Returns: string }
       app_staff_see_corr: { Args: { tid: string }; Returns: boolean }

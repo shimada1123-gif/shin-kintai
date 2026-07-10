@@ -3615,3 +3615,149 @@ h3,
   font-weight: 700;
   margin: 2px 0 8px;
 }
+
+/* ---------- オファー承諾/拒否の着地ページ（認証不要・1画面） ---------- */
+.offer-page {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: var(--bg, #f4f2ec);
+}
+
+.offer-card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--card, #fff);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 32px 24px;
+  text-align: center;
+  box-shadow: 0 18px 40px -24px rgb(20 25 40 / 30%);
+}
+
+.offer-eyebrow {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.offer-icon {
+  width: 64px;
+  height: 64px;
+  margin: 18px auto 10px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 34px;
+  font-weight: 900;
+  color: #fff;
+}
+
+.offer-icon.ok {
+  background: var(--green);
+}
+
+.offer-icon.ng {
+  background: var(--red);
+}
+
+.offer-icon.wait {
+  background: var(--muted);
+}
+
+.offer-title {
+  font-size: 17px;
+  font-weight: 900;
+  color: var(--ink);
+  margin: 0 0 8px;
+  line-height: 1.6;
+}
+
+.offer-detail {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--indigo);
+  margin: 0 0 6px;
+}
+
+.offer-note {
+  font-size: 12.5px;
+  color: var(--red);
+  font-weight: 700;
+  margin: 8px 0 0;
+  line-height: 1.7;
+}
+
+.offer-foot {
+  margin: 16px 0 0;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+/* オファー着地: 承諾前の確認フォーム（二段階承認） */
+.offer-lead {
+  font-size: 13px;
+  color: var(--ink);
+  line-height: 1.9;
+  margin: 12px 0 14px;
+  text-align: left;
+}
+
+.offer-comment {
+  width: 100%;
+  font-family: var(--jp);
+  font-size: 14px;
+  color: var(--ink);
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  resize: vertical;
+  margin-bottom: 14px;
+}
+
+.offer-comment:focus-visible {
+  outline: 3px solid var(--gold-soft);
+  outline-offset: 1px;
+  border-color: var(--indigo);
+}
+
+.offer-accept-btn {
+  width: 100%;
+  font-family: var(--jp);
+  font-size: 15px;
+  font-weight: 900;
+  padding: 14px;
+  border: 1px solid var(--indigo);
+  border-radius: 10px;
+  background: var(--indigo);
+  color: #fff;
+  cursor: pointer;
+  transition: 0.12s;
+}
+
+.offer-accept-btn:hover {
+  opacity: 0.92;
+}
+
+.offer-decline-link {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  background: none;
+  border: none;
+  font-family: var(--jp);
+  font-size: 12.5px;
+  color: var(--muted);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.offer-decline-link:hover {
+  color: var(--red);
+}
