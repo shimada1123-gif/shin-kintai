@@ -1270,6 +1270,22 @@ export type Database = {
       app_can_store: { Args: { sid: string }; Returns: boolean }
       app_has_perm: { Args: { perm: string; tid: string }; Returns: boolean }
       app_is_member: { Args: { tid: string }; Returns: boolean }
+      app_my_offers: {
+        Args: never
+        Returns: {
+          deadline_at: string
+          end_min: number
+          is_my_win: boolean
+          my_comment: string
+          my_response: string
+          offer_id: string
+          offer_status: string
+          position_name: string
+          responded_at: string
+          start_min: number
+          work_date: string
+        }[]
+      }
       app_offer_accept: {
         Args: { p_comment: string; p_token: string }
         Returns: Json

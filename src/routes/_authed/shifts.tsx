@@ -8,12 +8,14 @@ import {
   cancelOffer,
   confirmOfferRecipient,
   createDraftOffers,
+  fetchMyOffers,
   fetchOfferRecipients,
   fetchOffers,
   fetchUnseenDeclines,
   markDeclinesSeen,
   previewDraftOffers,
   sendDraftOffers,
+  type MyOfferRow,
   type OfferRecipientRow,
   type OfferRow,
 } from '@/lib/queries/offers'
@@ -2373,6 +2375,13 @@ function MyShiftView() {
     queryFn: () => fetchMyShifts(staffId!, today, until),
   })
 
+  // あなたへのオファー（0018 definer。本人分だけ返る・token等の機微列なし）
+  const myOffersQ = useQuery({
+    queryKey: ['my_offers', staffId],
+    enabled: !!staffId,
+    queryFn: fetchMyOffers,
+  })
+
   if (!staffId) {
     return <p className="note">スタッフ情報が紐付いていないため、マイシフトはありません。</p>
   }
@@ -2443,9 +2452,80 @@ function MyShiftView() {
         </ul>
       )}
 
+      {(myOffersQ.data?.length ?? 0) > 0 && (
+        <>
+          <div className="sec-h">
+            <h3>あなたへのオファー</h3>
+            <span className="rule" />
+            <span className="cnt mono">{myOffersQ.data!.length}</span>
+          </div>
+          <ul className="my-offer-list">
+            {myOffersQ.data!.map((o) => {
+              const b = myOfferBadge(o)
+              return (
+                <li key={o.offer_id} className="my-offer-row">
+                  <div className="my-offer-top">
+                    <span className="mono small myshift-date">{dateLabel(o.work_date)}</span>
+                    <span className="mono myshift-time">
+                      {minToHHMM(o.start_min)}〜{minToHHMM(o.end_min)}
+                    </span>
+                    {o.position_name && <span className="asg-pos">{o.position_name}</span>}
+                    <span className={`badge resp-badge-${b.cls}`}>{b.label}</span>
+                    {o.my_response === 'applied' &&
+                      o.offer_status === 'open' && (
+                        <span className="mono my-offer-deadline">
+                          回答締切{' '}
+                          {new Date(o.deadline_at).toLocaleString('ja-JP', {
+                            month: 'numeric',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
+                      )}
+                  </div>
+                  {o.my_response === 'applied' && o.my_comment && (
+                    <div className="my-offer-comment">💬 {o.my_comment}</div>
+                  )}
+                  {o.my_response === 'pending' && o.offer_status === 'open' && (
+                    <div className="note">メールのリンクから回答できます。</div>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        </>
+      )}
+      {myOffersQ.error && (
+        <p className="login-error" role="alert">
+          {errText(myOffersQ.error, 'オファー状況を取得できませんでした')}
+        </p>
+      )}
+
       <p className="note">
         シフトの変更が必要なときは店舗の管理者に相談してください（マイシフトからは変更できません）。
       </p>
     </>
   )
+}
+
+/** 本人向けオファー行の状態バッジ。募集の取消/期限切れは response より優先して表示 */
+function myOfferBadge(o: MyOfferRow): { cls: string; label: string } {
+  if (o.offer_status === 'cancelled') return { cls: 'superseded', label: '募集取消' }
+  if (o.offer_status === 'expired') return { cls: 'superseded', label: '募集期限切れ' }
+  if (o.my_response === 'confirmed' && o.is_my_win === true) {
+    return { cls: 'confirmed', label: '確定' }
+  }
+  switch (o.my_response) {
+    case 'applied':
+      return { cls: 'applied', label: '申請中' }
+    case 'superseded':
+      return { cls: 'superseded', label: '他の方で確定' }
+    case 'declined':
+      return { cls: 'declined', label: '辞退済み' }
+    case 'confirmed':
+      return { cls: 'confirmed', label: '確定' }
+    default:
+      return { cls: 'pending', label: '未回答' }
+  }
 }

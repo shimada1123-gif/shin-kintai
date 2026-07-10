@@ -187,3 +187,31 @@ export async function fetchUnseenDeclines(storeId: string): Promise<UnseenDeclin
 export async function markDeclinesSeen(storeId: string): Promise<MarkDeclinesSeenResult> {
   return markDeclinesSeenSrv({ data: { store_id: storeId } })
 }
+
+/* ---------- 本人のオファー閲覧（0018 app_my_offers・definer） ---------- */
+
+export interface MyOfferRow {
+  offer_id: string
+  work_date: string
+  start_min: number
+  end_min: number
+  position_name: string | null
+  offer_status: 'open' | 'filled' | 'cancelled' | 'expired' // draft は関数側で除外済み
+  my_response: 'pending' | 'applied' | 'declined' | 'confirmed' | 'superseded'
+  my_comment: string | null
+  deadline_at: string
+  responded_at: string | null
+  /** winner が null のとき null になり得る → UI は ===true で判定 */
+  is_my_win: boolean | null
+}
+
+/**
+ * 自分へのオファー一覧。ブラウザ直＋本人JWTで definer（app_my_offers）を実行。
+ * token_hash 等の機微列は関数が返さないため露出なし。work_date, start_min 昇順。
+ */
+export async function fetchMyOffers(): Promise<MyOfferRow[]> {
+  const supabase = await getSupabase()
+  const { data, error } = await supabase.rpc('app_my_offers')
+  if (error) throw error
+  return (data ?? []) as MyOfferRow[]
+}

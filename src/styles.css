@@ -4030,3 +4030,41 @@ h3,
   padding: 12px 14px;
   margin-bottom: 12px;
 }
+
+/* マイシフト: あなたへのオファー（0018） */
+.my-offer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.my-offer-row {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 10px 12px;
+}
+
+.my-offer-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+
+.my-offer-deadline {
+  font-size: 10.5px;
+  color: var(--muted);
+  margin-left: auto;
+}
+
+.my-offer-comment {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
