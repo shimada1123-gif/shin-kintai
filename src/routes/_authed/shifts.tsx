@@ -413,7 +413,15 @@ function AvailEditorModal({
               key={k}
               type="button"
               className={`kind-pick-btn kp-${k}${kind === k ? ' on' : ''}`}
-              onClick={() => setKind(k)}
+              onClick={() => {
+                setKind(k)
+                // △の初期値は毎正時にする。空のまま time picker を開くと
+                // ブラウザが現在時刻（分まで）を初期表示してしまうため。
+                if (k === 'partial') {
+                  if (!start) setStart('17:00')
+                  if (!end) setEnd('22:00')
+                }
+              }}
             >
               {label}
             </button>
@@ -424,11 +432,22 @@ function AvailEditorModal({
           <div className="asg-grid">
             <label className="field">
               <span>開始</span>
-              <input type="time" value={start} onChange={(e) => setStart(e.target.value)} />
+              {/* step=3600: ピッカーは1時間刻み。手入力なら任意の分も可 */}
+              <input
+                type="time"
+                step={3600}
+                value={start}
+                onChange={(e) => setStart(e.target.value)}
+              />
             </label>
             <label className="field">
               <span>終了</span>
-              <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} />
+              <input
+                type="time"
+                step={3600}
+                value={end}
+                onChange={(e) => setEnd(e.target.value)}
+              />
             </label>
           </div>
         )}
