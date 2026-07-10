@@ -3770,3 +3770,162 @@ h3,
 .offer-compose .board-field {
   margin-top: 12px;
 }
+
+/* オファー枠チップ（週ビルダー日カード） */
+.day-offers {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.offer-chip {
+  font-family: var(--jp);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  text-align: left;
+  font-size: 11px;
+  border-radius: 7px;
+  padding: 5px 8px;
+  cursor: pointer;
+  border: 1px dashed var(--line);
+  background: #faf9f6;
+  color: var(--ink);
+  transition: 0.12s;
+}
+
+.offer-chip:hover {
+  border-color: var(--indigo);
+}
+
+.offer-chip .oc-badge {
+  font-size: 10.5px;
+}
+
+.offer-chip.oc-open .oc-badge {
+  color: var(--muted);
+}
+
+.offer-chip.oc-attn {
+  border-color: var(--gold);
+  background: var(--gold-soft);
+}
+
+.offer-chip.oc-attn .oc-badge {
+  color: #6b4e00;
+}
+
+.offer-chip.oc-filled {
+  border-style: solid;
+  border-color: var(--green);
+  background: var(--green-soft);
+}
+
+.offer-chip.oc-filled .oc-badge {
+  color: var(--green);
+}
+
+.offer-chip.oc-expired {
+  opacity: 0.6;
+}
+
+.offer-chip.oc-cancelled {
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+
+.oc-pos {
+  color: var(--muted);
+}
+
+.oc-deadline {
+  font-size: 9.5px;
+  color: var(--muted);
+  margin-left: auto;
+}
+
+.oc-overdue {
+  font-style: normal;
+  font-weight: 900;
+  color: var(--red);
+  margin-left: 4px;
+}
+
+/* オファー申請者一覧モーダル */
+.oc-winner {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  background: var(--green-soft);
+  border-left: 3px solid var(--green);
+  border-radius: 5px;
+  color: var(--green);
+  font-weight: 700;
+}
+
+.offer-msg {
+  white-space: pre-line;
+  margin-top: 10px;
+}
+
+.offer-apps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.offer-app {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 12px;
+}
+
+.offer-app.resp-applied {
+  border-color: var(--gold);
+  background: #fffdf5;
+}
+
+.offer-app.resp-confirmed {
+  border-color: var(--green);
+  background: var(--green-soft);
+}
+
+.offer-app.resp-declined,
+.offer-app.resp-superseded {
+  opacity: 0.65;
+}
+
+.offer-app-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+
+.oa-time {
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
+.oa-confirm {
+  margin-left: auto;
+}
+
+.offer-app-comment {
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--ink);
+  background: #faf9f6;
+  border-radius: 6px;
+  padding: 6px 9px;
+  overflow-wrap: anywhere;
+}
+
+.badge.resp-badge-pending { background: #e5e9f2; color: var(--muted); }
+.badge.resp-badge-applied { background: var(--gold-soft); color: #6b4e00; }
+.badge.resp-badge-declined { background: #eee; color: var(--muted); }
+.badge.resp-badge-confirmed { background: var(--green-soft); color: var(--green); }
+.badge.resp-badge-superseded { background: #eee; color: var(--muted); }

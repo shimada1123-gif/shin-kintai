@@ -8,6 +8,14 @@ import { usePermissions } from '@/lib/perm'
 import { annErrText, createAnnouncement } from '@/lib/queries/announcements'
 import { sendAnnouncementMail } from '@/lib/server/announce-mail'
 import { createOffers } from '@/lib/server/offer-create'
+import {
+  cancelOffer,
+  confirmOfferRecipient,
+  fetchOfferRecipients,
+  fetchOffers,
+  type OfferRecipientRow,
+  type OfferRow,
+} from '@/lib/queries/offers'
 import { fetchEmploymentKinds, fetchPositions, fetchStaffList } from '@/lib/queries/master'
 import {
   asgErrText,
@@ -1043,6 +1051,7 @@ function BuildView() {
     | null
   >(null)
   const [adding, setAdding] = useState<string | null>(null) // ＋スタッフを追加を開いた日付
+  const [offerOpen, setOfferOpen] = useState<string | null>(null) // 開いているオファー枠の id
   const week = useMemo(() => weekMeta(weekBase), [weekBase])
 
   const canAnnounce = has('announce_post')
@@ -1122,6 +1131,27 @@ function BuildView() {
     enabled: !!storeId,
     queryFn: () => fetchStoreRoster(storeId),
   })
+  // オファー枠（RLS so_sel/sor_sel = 管理者スコープ）。招待行は週内全枠ぶんを一括取得
+  const offersQ = useQuery({
+    queryKey: ['offers', storeId, week.from],
+    enabled: !!storeId,
+    queryFn: () => fetchOffers(storeId, week.from, week.to),
+  })
+  const offerIds = useMemo(() => (offersQ.data ?? []).map((o) => o.id), [offersQ.data])
+  const offRecQ = useQuery({
+    queryKey: ['offer_recipients', offerIds.join('|')],
+    enabled: offerIds.length > 0,
+    queryFn: () => fetchOfferRecipients(offerIds),
+  })
+  const recsByOffer = useMemo(() => {
+    const m = new Map<string, OfferRecipientRow[]>()
+    for (const r of offRecQ.data ?? []) {
+      const list = m.get(r.offer_id) ?? []
+      list.push(r)
+      m.set(r.offer_id, list)
+    }
+    return m
+  }, [offRecQ.data])
 
   if (!me) return null
 
@@ -1272,6 +1302,68 @@ function BuildView() {
                 </div>
               )}
 
+              {(() => {
+                const dayOffers = (offersQ.data ?? []).filter((o) => o.work_date === d.date)
+                if (dayOffers.length === 0) return null
+                return (
+                  <div className="day-offers">
+                    {dayOffers.map((o) => {
+                      const recs = recsByOffer.get(o.id) ?? []
+                      const appliedN = recs.filter((r) => r.response === 'applied').length
+                      const winner =
+                        recs.find((r) => r.response === 'confirmed')?.staff_name ?? null
+                      const overdue = o.status === 'open' && new Date(o.deadline_at) < new Date()
+                      const cls =
+                        o.status === 'filled'
+                          ? 'oc-filled'
+                          : o.status === 'cancelled'
+                            ? 'oc-cancelled'
+                            : o.status === 'expired'
+                              ? 'oc-expired'
+                              : appliedN > 0
+                                ? 'oc-attn'
+                                : 'oc-open'
+                      const badge =
+                        o.status === 'filled'
+                          ? `確定：${winner ?? '確定済み'}${winner ? 'さん' : ''}`
+                          : o.status === 'cancelled'
+                            ? '取消'
+                            : o.status === 'expired'
+                              ? '期限切れ'
+                              : appliedN > 0
+                                ? `申請 ${appliedN}件・確認待ち`
+                                : '募集中（承諾待ち）'
+                      return (
+                        <button
+                          key={o.id}
+                          type="button"
+                          className={`offer-chip ${cls}`}
+                          onClick={() => setOfferOpen(o.id)}
+                        >
+                          <span className="mono">
+                            {minToHHMM(o.start_min)}-{minToHHMM(o.end_min)}
+                          </span>
+                          <span className="oc-pos">{posName(o.position_id) ?? '不問'}</span>
+                          <b className="oc-badge">{badge}</b>
+                          {o.status === 'open' && (
+                            <span className="oc-deadline mono">
+                              〆
+                              {new Date(o.deadline_at).toLocaleString('ja-JP', {
+                                month: 'numeric',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                              {overdue && <em className="oc-overdue">締切超過</em>}
+                            </span>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )
+              })()}
+
               <div className="day-asgs">
                 {dayAsgs.map((a) => (
                   <button
@@ -1388,7 +1480,210 @@ function BuildView() {
           onClose={() => setAdding(null)}
         />
       )}
+
+      {offerOpen &&
+        (() => {
+          const offer = (offersQ.data ?? []).find((o) => o.id === offerOpen)
+          if (!offer) return null
+          return (
+            <OfferModal
+              offer={offer}
+              recipients={recsByOffer.get(offer.id) ?? []}
+              positionName={posName(offer.position_id)}
+              onClose={() => setOfferOpen(null)}
+            />
+          )
+        })()}
     </>
+  )
+}
+
+const OFFER_STATUS_LABEL: Record<OfferRow['status'], string> = {
+  open: '募集中',
+  filled: '確定済み',
+  cancelled: '取消',
+  expired: '期限切れ',
+}
+
+const OFFER_RESPONSE_LABEL: Record<OfferRecipientRow['response'], string> = {
+  pending: '未応答',
+  applied: '申請済み',
+  declined: '辞退',
+  confirmed: '確定',
+  superseded: '他の方で確定',
+}
+
+/** オファー枠の申請者一覧＋確定/取消（confirm はブラウザ直 rpc。排他・権限は definer が最終防壁） */
+function OfferModal({
+  offer,
+  recipients,
+  positionName,
+  onClose,
+}: {
+  offer: OfferRow
+  recipients: OfferRecipientRow[]
+  positionName: string | null
+  onClose: () => void
+}) {
+  const qc = useQueryClient()
+  const [msg, setMsg] = useState<string | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+
+  const invalidate = () => {
+    void qc.invalidateQueries({ queryKey: ['offers'] })
+    void qc.invalidateQueries({ queryKey: ['offer_recipients'] })
+    // 確定で shift_assignments(draft) が増える＝シフト表示・充足度に反映
+    void qc.invalidateQueries({ queryKey: ['shift_asg'] })
+  }
+
+  const confirmMut = useMutation({
+    mutationFn: (a: { recipientId: string; staffName: string }) =>
+      confirmOfferRecipient(a.recipientId),
+    onSuccess: (r, a) => {
+      invalidate()
+      if (r.ok) {
+        setMsg(
+          `${a.staffName}さんで確定しました` +
+            (r.overlapWarning
+              ? '\n※同じ日に別の時間帯の予定と重なっています。ご確認ください'
+              : ''),
+        )
+        return
+      }
+      switch (r.reason) {
+        case 'already_filled':
+          setErr('この枠は既に確定済みです')
+          break
+        case 'forbidden':
+          setErr('確定する権限がありません')
+          break
+        case 'not_applicable':
+          setErr('この申請は確定できません（辞退/取消済み）')
+          break
+        case 'expired':
+          setErr('募集期限が過ぎています')
+          break
+        case 'cancelled':
+          setErr('この募集は取り消されました')
+          break
+        default:
+          setErr('確定できませんでした')
+      }
+    },
+    onError: (e) => setErr(errText(e, '確定できませんでした')),
+  })
+
+  const cancelMut = useMutation({
+    mutationFn: () => cancelOffer(offer.id),
+    onSuccess: () => {
+      invalidate()
+      setMsg('募集を取り消しました')
+    },
+    onError: (e) => setErr(errText(e, '募集を取り消せませんでした')),
+  })
+
+  const winner = recipients.find((r) => r.response === 'confirmed')
+  const dateLabel = new Date(`${offer.work_date}T00:00:00`).toLocaleDateString('ja-JP', {
+    month: 'long',
+    day: 'numeric',
+    weekday: 'short',
+  })
+  const deadlineLabel = new Date(offer.deadline_at).toLocaleString('ja-JP', {
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+
+  return (
+    <div className="modal show" onClick={onClose} role="dialog" aria-modal="true">
+      <div className="mcard mcard-wide" onClick={(e) => e.stopPropagation()}>
+        <div className="mh">{dateLabel} · オファー枠</div>
+        <div className="board-meta">
+          <span className="mono">
+            {minToHHMM(offer.start_min)}-{minToHHMM(offer.end_min)}
+          </span>
+          <span>{positionName ?? 'ポジション不問'}</span>
+          <span className="mono">〆 {deadlineLabel}</span>
+          <span>状態: {OFFER_STATUS_LABEL[offer.status]}</span>
+        </div>
+
+        {winner && (
+          <p className="note oc-winner">
+            確定：<b>{winner.staff_name}</b> さん
+          </p>
+        )}
+        {err && (
+          <p className="login-error" role="alert">
+            {err}
+          </p>
+        )}
+        {msg && (
+          <p className="board-info offer-msg" role="status">
+            {msg}
+          </p>
+        )}
+
+        <div className="offer-apps">
+          {recipients.length === 0 && <p className="note">招待がありません。</p>}
+          {recipients.map((r) => (
+            <div key={r.id} className={`offer-app resp-${r.response}`}>
+              <div className="offer-app-top">
+                <b>{r.staff_name}</b>
+                <span className={`badge resp-badge-${r.response}`}>
+                  {OFFER_RESPONSE_LABEL[r.response]}
+                </span>
+                {r.responded_at && (
+                  <span className="mono oa-time">
+                    {new Date(r.responded_at).toLocaleString('ja-JP', {
+                      month: 'numeric',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                )}
+                {r.response === 'applied' && (
+                  <button
+                    className="btn sm pri oa-confirm"
+                    disabled={offer.status !== 'open' || confirmMut.isPending}
+                    onClick={() => {
+                      setErr(null)
+                      setMsg(null)
+                      confirmMut.mutate({ recipientId: r.id, staffName: r.staff_name })
+                    }}
+                  >
+                    この人で確定
+                  </button>
+                )}
+              </div>
+              {r.comment && <div className="offer-app-comment">💬 {r.comment}</div>}
+            </div>
+          ))}
+        </div>
+
+        <div className="mbtns">
+          {offer.status === 'open' && (
+            <button
+              className="btn sm danger"
+              disabled={cancelMut.isPending}
+              onClick={() => {
+                if (confirm('この募集を取り消しますか？（招待済みの方は承諾できなくなります）')) {
+                  setErr(null)
+                  setMsg(null)
+                  cancelMut.mutate()
+                }
+              }}
+            >
+              募集を取り消す
+            </button>
+          )}
+          <button className="btn sm" onClick={onClose}>
+            閉じる
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
