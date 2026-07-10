@@ -7,3 +7,6 @@ SUPABASE_SERVICE_ROLE_KEY=
 # 生成: [Convert]::ToBase64String((New-Object byte[] 32 | % { [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($_); $_ }))
 # 本番は `wrangler secret put QR_DISPLAY_SECRET`
 QR_DISPLAY_SECRET=
+
+# 掲示板メール配信（Resend）。本番は `wrangler secret put RESEND_API_KEY`
+RESEND_API_KEY=

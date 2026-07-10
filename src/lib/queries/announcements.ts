@@ -161,12 +161,12 @@ async function insertTargets(
   }
 }
 
-/** 投稿作成。本体 → 宛先の順に insert。宛先で失敗したら本体を論理削除して原因を投げ直す */
+/** 投稿作成。本体 → 宛先の順に insert。宛先で失敗したら本体を論理削除して原因を投げ直す。戻り値=投稿id */
 export async function createAnnouncement(
   tenantId: string,
   authorId: string,
   d: AnnouncementDraft,
-): Promise<void> {
+): Promise<string> {
   validateDraft(d)
   const supabase = await getSupabase()
   // RETURNING（insert().select()）は ann_sel の評価対象になり、可視性ヘルパーが
@@ -193,6 +193,7 @@ export async function createAnnouncement(
       .eq('id', id)
     throw e
   }
+  return id
 }
 
 /** 編集。本体を更新し、宛先は差分で付け替える */

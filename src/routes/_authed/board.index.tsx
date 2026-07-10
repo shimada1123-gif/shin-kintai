@@ -19,8 +19,12 @@ import {
   type Importance,
   type ScopeType,
 } from '@/lib/queries/announcements'
+import {
+  getAnnouncementDeliveries,
+  sendAnnouncementMail,
+} from '@/lib/server/announce-mail'
 
-export const Route = createFileRoute('/_authed/board')({
+export const Route = createFileRoute('/_authed/board/')({
   component: BoardPage,
 })
 
@@ -61,6 +65,7 @@ function BoardPage() {
   const [detail, setDetail] = useState<AnnouncementRow | null>(null)
   const [editing, setEditing] = useState<AnnouncementRow | 'new' | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [info, setInfo] = useState<string | null>(null)
 
   const listQ = useQuery({
     queryKey: ['announcements', me?.tenantId],
@@ -130,6 +135,7 @@ function BoardPage() {
             className="btn pri board-new-btn"
             onClick={() => {
               setError(null)
+              setInfo(null)
               setEditing('new')
             }}
           >
@@ -141,6 +147,11 @@ function BoardPage() {
       {error && (
         <p className="login-error" role="alert">
           {error}
+        </p>
+      )}
+      {info && (
+        <p className="board-info" role="status">
+          {info}
         </p>
       )}
 
@@ -211,9 +222,10 @@ function BoardPage() {
           me={me}
           kinds={kinds}
           existing={editing === 'new' ? null : editing}
-          onSaved={() => {
+          onSaved={(msg) => {
             invalidateAll()
             setEditing(null)
+            setInfo(msg)
           }}
           onClose={() => setEditing(null)}
         />
@@ -241,6 +253,13 @@ function DetailModal({
   onDelete: () => void
   onClose: () => void
 }) {
+  // メール配信状況（管理できる人だけ問い合わせる。サーバー側でも同じ権限を検証）
+  const delivQ = useQuery({
+    queryKey: ['ann_deliv', ann.id],
+    enabled: canManage,
+    queryFn: () => getAnnouncementDeliveries({ data: { announcement_id: ann.id } }),
+  })
+
   return (
     <div className="modal show" onClick={onClose} role="dialog" aria-modal="true">
       <div className="mcard mcard-wide" onClick={(e) => e.stopPropagation()}>
@@ -255,6 +274,16 @@ function DetailModal({
         </div>
 
         <div className="board-body">{ann.body}</div>
+
+        {canManage && delivQ.data && (
+          <div className="note board-deliv">
+            {delivQ.data.delivered
+              ? `メール配信: 送信 ${delivQ.data.sent} 件 / 失敗 ${delivQ.data.failed} 件${
+                  delivQ.data.lastAt ? `（最終 ${fmtDate(delivQ.data.lastAt)}）` : ''
+                }`
+              : 'メール配信はまだ行われていません。'}
+          </div>
+        )}
 
         <div className="mbtns">
           {canManage && (
@@ -286,7 +315,7 @@ function EditorModal({
   me: MeContext
   kinds: EmploymentKind[]
   existing: AnnouncementRow | null
-  onSaved: () => void
+  onSaved: (info: string | null) => void
   onClose: () => void
 }) {
   const { user } = useAuth()
@@ -300,19 +329,37 @@ function EditorModal({
   )
   const [storeIds, setStoreIds] = useState<string[]>(existing?.targetStoreIds ?? [])
   const [kindIds, setKindIds] = useState<string[]>(existing?.targetKindIds ?? [])
+  const [notify, setNotify] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const save = useMutation({
-    mutationFn: () => {
+    mutationFn: async (): Promise<string | null> => {
       const draft = { title, body, importance, scopeType, storeIds, kindIds }
-      return existing
-        ? updateAnnouncement(existing.id, draft, {
-            storeIds: existing.targetStoreIds,
-            kindIds: existing.targetKindIds,
-          })
-        : createAnnouncement(me.tenantId, user!.id, draft)
+      let id: string
+      if (existing) {
+        await updateAnnouncement(existing.id, draft, {
+          storeIds: existing.targetStoreIds,
+          kindIds: existing.targetKindIds,
+        })
+        id = existing.id
+      } else {
+        id = await createAnnouncement(me.tenantId, user!.id, draft)
+      }
+      if (!notify) return null
+
+      // 投稿の保存は完了している。メール送信の失敗は保存を巻き戻さず結果だけ伝える
+      try {
+        const r = await sendAnnouncementMail({ data: { announcement_id: id } })
+        if (r.total === 0) return '宛先に該当するスタッフがいなかったため、メールは送信されませんでした。'
+        const extras: string[] = []
+        if (r.failed > 0) extras.push(`失敗 ${r.failed} 件`)
+        if (r.skipped > 0) extras.push(`アドレス未登録 ${r.skipped} 件`)
+        return `${r.sent}人にメールを送信しました${extras.length > 0 ? `（${extras.join('・')}）` : ''}。`
+      } catch (e) {
+        return `投稿は保存しましたが、メール送信に失敗しました：${annErrText(e, '送信エラー')}`
+      }
     },
-    onSuccess: onSaved,
+    onSuccess: (msg) => onSaved(msg),
     onError: (e) => setError(annErrText(e, '保存できませんでした')),
   })
 
@@ -448,6 +495,11 @@ function EditorModal({
         <p className="note board-preview">
           この投稿は <b>{preview}</b> に表示されます。
         </p>
+
+        <label className="target-check board-notify">
+          <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} />
+          <span>メールでも通知する（宛先範囲のスタッフに送信）</span>
+        </label>
 
         <div className="mbtns">
           <button className="btn sm" onClick={onClose}>

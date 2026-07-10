@@ -20,8 +20,9 @@ import { Route as AuthedSettingsRouteImport } from './routes/_authed/settings'
 import { Route as AuthedReportsRouteImport } from './routes/_authed/reports'
 import { Route as AuthedPunchRouteImport } from './routes/_authed/punch'
 import { Route as AuthedPermissionsRouteImport } from './routes/_authed/permissions'
-import { Route as AuthedBoardRouteImport } from './routes/_authed/board'
 import { Route as AuthedAttendanceRouteImport } from './routes/_authed/attendance'
+import { Route as AuthedBoardIndexRouteImport } from './routes/_authed/board.index'
+import { Route as AuthedBoardAnnIdRouteImport } from './routes/_authed/board.$annId'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -77,14 +78,19 @@ const AuthedPermissionsRoute = AuthedPermissionsRouteImport.update({
   path: '/permissions',
   getParentRoute: () => AuthedRoute,
 } as any)
-const AuthedBoardRoute = AuthedBoardRouteImport.update({
-  id: '/board',
-  path: '/board',
-  getParentRoute: () => AuthedRoute,
-} as any)
 const AuthedAttendanceRoute = AuthedAttendanceRouteImport.update({
   id: '/attendance',
   path: '/attendance',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedBoardIndexRoute = AuthedBoardIndexRouteImport.update({
+  id: '/board/',
+  path: '/board/',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedBoardAnnIdRoute = AuthedBoardAnnIdRouteImport.update({
+  id: '/board/$annId',
+  path: '/board/$annId',
   getParentRoute: () => AuthedRoute,
 } as any)
 
@@ -92,7 +98,6 @@ export interface FileRoutesByFullPath {
   '/': typeof AuthedIndexRoute
   '/login': typeof LoginRoute
   '/attendance': typeof AuthedAttendanceRoute
-  '/board': typeof AuthedBoardRoute
   '/permissions': typeof AuthedPermissionsRoute
   '/punch': typeof AuthedPunchRoute
   '/reports': typeof AuthedReportsRoute
@@ -101,11 +106,12 @@ export interface FileRoutesByFullPath {
   '/staff': typeof AuthedStaffRoute
   '/users': typeof AuthedUsersRoute
   '/display/$storeId': typeof DisplayStoreIdRoute
+  '/board/$annId': typeof AuthedBoardAnnIdRoute
+  '/board/': typeof AuthedBoardIndexRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/attendance': typeof AuthedAttendanceRoute
-  '/board': typeof AuthedBoardRoute
   '/permissions': typeof AuthedPermissionsRoute
   '/punch': typeof AuthedPunchRoute
   '/reports': typeof AuthedReportsRoute
@@ -115,13 +121,14 @@ export interface FileRoutesByTo {
   '/users': typeof AuthedUsersRoute
   '/display/$storeId': typeof DisplayStoreIdRoute
   '/': typeof AuthedIndexRoute
+  '/board/$annId': typeof AuthedBoardAnnIdRoute
+  '/board': typeof AuthedBoardIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authed': typeof AuthedRouteWithChildren
   '/login': typeof LoginRoute
   '/_authed/attendance': typeof AuthedAttendanceRoute
-  '/_authed/board': typeof AuthedBoardRoute
   '/_authed/permissions': typeof AuthedPermissionsRoute
   '/_authed/punch': typeof AuthedPunchRoute
   '/_authed/reports': typeof AuthedReportsRoute
@@ -131,6 +138,8 @@ export interface FileRoutesById {
   '/_authed/users': typeof AuthedUsersRoute
   '/display/$storeId': typeof DisplayStoreIdRoute
   '/_authed/': typeof AuthedIndexRoute
+  '/_authed/board/$annId': typeof AuthedBoardAnnIdRoute
+  '/_authed/board/': typeof AuthedBoardIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -138,7 +147,6 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/attendance'
-    | '/board'
     | '/permissions'
     | '/punch'
     | '/reports'
@@ -147,11 +155,12 @@ export interface FileRouteTypes {
     | '/staff'
     | '/users'
     | '/display/$storeId'
+    | '/board/$annId'
+    | '/board/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
     | '/attendance'
-    | '/board'
     | '/permissions'
     | '/punch'
     | '/reports'
@@ -161,12 +170,13 @@ export interface FileRouteTypes {
     | '/users'
     | '/display/$storeId'
     | '/'
+    | '/board/$annId'
+    | '/board'
   id:
     | '__root__'
     | '/_authed'
     | '/login'
     | '/_authed/attendance'
-    | '/_authed/board'
     | '/_authed/permissions'
     | '/_authed/punch'
     | '/_authed/reports'
@@ -176,6 +186,8 @@ export interface FileRouteTypes {
     | '/_authed/users'
     | '/display/$storeId'
     | '/_authed/'
+    | '/_authed/board/$annId'
+    | '/_authed/board/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -263,13 +275,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedPermissionsRouteImport
       parentRoute: typeof AuthedRoute
     }
-    '/_authed/board': {
-      id: '/_authed/board'
-      path: '/board'
-      fullPath: '/board'
-      preLoaderRoute: typeof AuthedBoardRouteImport
-      parentRoute: typeof AuthedRoute
-    }
     '/_authed/attendance': {
       id: '/_authed/attendance'
       path: '/attendance'
@@ -277,12 +282,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedAttendanceRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/board/': {
+      id: '/_authed/board/'
+      path: '/board'
+      fullPath: '/board/'
+      preLoaderRoute: typeof AuthedBoardIndexRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/board/$annId': {
+      id: '/_authed/board/$annId'
+      path: '/board/$annId'
+      fullPath: '/board/$annId'
+      preLoaderRoute: typeof AuthedBoardAnnIdRouteImport
+      parentRoute: typeof AuthedRoute
+    }
   }
 }
 
 interface AuthedRouteChildren {
   AuthedAttendanceRoute: typeof AuthedAttendanceRoute
-  AuthedBoardRoute: typeof AuthedBoardRoute
   AuthedPermissionsRoute: typeof AuthedPermissionsRoute
   AuthedPunchRoute: typeof AuthedPunchRoute
   AuthedReportsRoute: typeof AuthedReportsRoute
@@ -291,11 +309,12 @@ interface AuthedRouteChildren {
   AuthedStaffRoute: typeof AuthedStaffRoute
   AuthedUsersRoute: typeof AuthedUsersRoute
   AuthedIndexRoute: typeof AuthedIndexRoute
+  AuthedBoardAnnIdRoute: typeof AuthedBoardAnnIdRoute
+  AuthedBoardIndexRoute: typeof AuthedBoardIndexRoute
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedAttendanceRoute: AuthedAttendanceRoute,
-  AuthedBoardRoute: AuthedBoardRoute,
   AuthedPermissionsRoute: AuthedPermissionsRoute,
   AuthedPunchRoute: AuthedPunchRoute,
   AuthedReportsRoute: AuthedReportsRoute,
@@ -304,6 +323,8 @@ const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedStaffRoute: AuthedStaffRoute,
   AuthedUsersRoute: AuthedUsersRoute,
   AuthedIndexRoute: AuthedIndexRoute,
+  AuthedBoardAnnIdRoute: AuthedBoardAnnIdRoute,
+  AuthedBoardIndexRoute: AuthedBoardIndexRoute,
 }
 
 const AuthedRouteWithChildren =
