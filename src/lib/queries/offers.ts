@@ -2,9 +2,11 @@ import { getSupabase } from '@/lib/auth/supabase-client'
 import {
   confirmOffer,
   createDraftOffers as createDraftOffersSrv,
+  markDeclinesSeen as markDeclinesSeenSrv,
   previewDraftOffers as previewDraftOffersSrv,
   sendDraftOffers as sendDraftOffersSrv,
   type CreateDraftOffersResult,
+  type MarkDeclinesSeenResult,
   type OfferDraftInput,
   type PreviewDraftOffersResult,
   type SendDraftOffersResult,
@@ -127,4 +129,61 @@ export async function previewDraftOffers(storeId: string): Promise<PreviewDraftO
 /** 下書きの一斉送信（1人1通に集約）。締切切れは draft のまま残る */
 export async function sendDraftOffers(storeId: string): Promise<SendDraftOffersResult> {
   return sendDraftOffersSrv({ data: { store_id: storeId } })
+}
+
+/* ---------- 辞退の可視化（0016 mgr_seen_at） ---------- */
+
+export interface UnseenDecline {
+  recipient_id: string
+  staff_name: string
+  work_date: string
+  start_min: number
+  end_min: number
+  offer_id: string
+  responded_at: string | null
+}
+
+/**
+ * 未確認の辞退（全期間・週フィルタなし）。ブラウザ直＋RLS（sor_sel=app_can_store）。
+ * cancelled / draft の枠は対象外。新しい辞退が上（responded_at 降順）。
+ */
+export async function fetchUnseenDeclines(storeId: string): Promise<UnseenDecline[]> {
+  const supabase = await getSupabase()
+  const { data: offers, error: offErr } = await supabase
+    .from('shift_offers')
+    .select('id, work_date, start_min, end_min')
+    .eq('store_id', storeId)
+    .in('status', ['open', 'filled', 'expired'])
+  if (offErr) throw offErr
+  const offerIds = (offers ?? []).map((o) => o.id)
+  if (offerIds.length === 0) return []
+
+  const { data: recs, error } = await supabase
+    .from('shift_offer_recipients')
+    .select('id, offer_id, responded_at, staff:staff_id (full_name)')
+    .in('offer_id', offerIds)
+    .eq('response', 'declined')
+    .is('mgr_seen_at', null)
+  if (error) throw error
+
+  const offerById = new Map((offers ?? []).map((o) => [o.id, o]))
+  return (recs ?? [])
+    .map((r) => {
+      const off = offerById.get(r.offer_id)!
+      return {
+        recipient_id: r.id,
+        staff_name: (r.staff as { full_name: string } | null)?.full_name ?? '(不明)',
+        work_date: off.work_date,
+        start_min: off.start_min,
+        end_min: off.end_min,
+        offer_id: r.offer_id,
+        responded_at: r.responded_at,
+      }
+    })
+    .sort((a, b) => (b.responded_at ?? '').localeCompare(a.responded_at ?? ''))
+}
+
+/** 未確認辞退を一括で確認済みに（サーバ関数・blind update）。戻り値=更新件数 */
+export async function markDeclinesSeen(storeId: string): Promise<MarkDeclinesSeenResult> {
+  return markDeclinesSeenSrv({ data: { store_id: storeId } })
 }

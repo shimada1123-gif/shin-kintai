@@ -823,6 +823,7 @@ export type Database = {
           created_at: string
           email: string | null
           id: string
+          mgr_seen_at: string | null
           offer_id: string
           responded_at: string | null
           response: string
@@ -835,6 +836,7 @@ export type Database = {
           created_at?: string
           email?: string | null
           id?: string
+          mgr_seen_at?: string | null
           offer_id: string
           responded_at?: string | null
           response?: string
@@ -847,6 +849,7 @@ export type Database = {
           created_at?: string
           email?: string | null
           id?: string
+          mgr_seen_at?: string | null
           offer_id?: string
           responded_at?: string | null
           response?: string

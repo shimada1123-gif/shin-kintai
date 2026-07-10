@@ -787,3 +787,51 @@ export const sendDraftOffers = createServerFn({ method: 'POST' })
 
     return result
   })
+
+/* -------------------- 辞退の管理者確認（mgr_seen_at・0016） -------------------- */
+
+export interface MarkDeclinesSeenResult {
+  marked: number
+}
+
+/**
+ * その店舗の未確認辞退（response='declined' ∧ mgr_seen_at is null）を一括で確認済みにする。
+ * blind update（.select() なし）。件数は更新前の select で数える。
+ * 共有セマンティクス: 1人の管理者が確認すると店舗の全管理者のバッジが消える（仕様）。
+ */
+export const markDeclinesSeen = createServerFn({ method: 'POST' })
+  .inputValidator((d: { store_id: string }) => {
+    assert(typeof d.store_id === 'string' && d.store_id, '店舗が指定されていません。')
+    return d
+  })
+  .handler(async ({ data }): Promise<MarkDeclinesSeenResult> => {
+    const caller = await requireCaller()
+    const admin = getAdminClient()
+    await assertShiftEditForStore(admin, caller, data.store_id)
+
+    const { data: offers, error: offErr } = await admin
+      .from('shift_offers')
+      .select('id')
+      .eq('store_id', data.store_id)
+    assert(!offErr, 'オファーの取得に失敗しました。')
+    const offerIds = (offers ?? []).map((o) => o.id)
+    if (offerIds.length === 0) return { marked: 0 }
+
+    const { data: targets, error: selErr } = await admin
+      .from('shift_offer_recipients')
+      .select('id')
+      .in('offer_id', offerIds)
+      .eq('response', 'declined')
+      .is('mgr_seen_at', null)
+    assert(!selErr, '未確認辞退の取得に失敗しました。')
+    const ids = (targets ?? []).map((t) => t.id)
+    if (ids.length === 0) return { marked: 0 }
+
+    const { error: updErr } = await admin
+      .from('shift_offer_recipients')
+      .update({ mgr_seen_at: new Date().toISOString() })
+      .in('id', ids)
+    assert(!updErr, '確認済みへの更新に失敗しました。')
+
+    return { marked: ids.length }
+  })

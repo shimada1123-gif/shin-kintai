@@ -3978,3 +3978,46 @@ h3,
   font-weight: 700;
   color: var(--red);
 }
+
+/* 辞退の可視化（0016） */
+.offer-chip.oc-alldeclined {
+  border-style: solid;
+  border-color: var(--red);
+  background: var(--red-soft);
+}
+
+.offer-chip.oc-alldeclined .oc-badge {
+  color: var(--red);
+}
+
+.decline-panel {
+  border: 1px dashed var(--red);
+  background: var(--red-soft);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+
+.decline-badge {
+  font-family: var(--jp);
+  font-size: 12.5px;
+  font-weight: 900;
+  color: var(--red);
+  background: none;
+  border: 1px solid var(--red);
+  border-radius: 20px;
+  padding: 5px 14px;
+  cursor: pointer;
+}
+
+.decline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0 4px;
+  font-size: 12.5px;
+}
+
+.decline-row {
+  color: var(--ink);
+}

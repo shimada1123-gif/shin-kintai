@@ -13,6 +13,8 @@ import {
   createDraftOffers,
   fetchOfferRecipients,
   fetchOffers,
+  fetchUnseenDeclines,
+  markDeclinesSeen,
   previewDraftOffers,
   sendDraftOffers,
   type OfferRecipientRow,
@@ -1180,6 +1182,25 @@ function BuildView() {
     onError: (e) => setDraftErr(errText(e, '一斉送信に失敗しました')),
   })
 
+  // 新しい辞退（全期間・未確認のみ。0016 mgr_seen_at）
+  const [declPanelOpen, setDeclPanelOpen] = useState(false)
+  const [declErr, setDeclErr] = useState<string | null>(null)
+  const unseenQ = useQuery({
+    queryKey: ['unseen_declines', storeId],
+    enabled: !!storeId,
+    queryFn: () => fetchUnseenDeclines(storeId),
+  })
+  const markSeen = useMutation({
+    mutationFn: () => markDeclinesSeen(storeId),
+    onSuccess: () => {
+      setDeclPanelOpen(false)
+      void qc.invalidateQueries({ queryKey: ['unseen_declines'] })
+      void qc.invalidateQueries({ queryKey: ['offer_recipients'] })
+      void qc.invalidateQueries({ queryKey: ['offers'] })
+    },
+    onError: (e) => setDeclErr(errText(e, '確認済みにできませんでした')),
+  })
+
   if (!me) return null
 
   const positions = (posQ.data ?? []).filter((p) => p.store_id === null || p.store_id === storeId)
@@ -1330,6 +1351,64 @@ function BuildView() {
         </p>
       )}
 
+      {(unseenQ.data?.length ?? 0) > 0 && (
+        <div className="decline-panel">
+          <div className="dop-head">
+            <button
+              type="button"
+              className="decline-badge"
+              onClick={() => setDeclPanelOpen((v) => !v)}
+            >
+              新しい辞退: {unseenQ.data!.length}件
+            </button>
+            <span className="note">全期間・未確認のみ（タップで一覧）</span>
+          </div>
+          {declPanelOpen && (
+            <>
+              <div className="decline-list">
+                {unseenQ.data!.map((d) => (
+                  <div key={d.recipient_id} className="decline-row">
+                    <b>{d.staff_name}</b> さん —{' '}
+                    {new Date(`${d.work_date}T00:00:00`).toLocaleDateString('ja-JP', {
+                      month: 'numeric',
+                      day: 'numeric',
+                      weekday: 'short',
+                    })}{' '}
+                    <span className="mono">
+                      {minToHHMM(d.start_min)}〜{minToHHMM(d.end_min)}
+                    </span>{' '}
+                    — 辞退{' '}
+                    {d.responded_at
+                      ? new Date(d.responded_at).toLocaleString('ja-JP', {
+                          month: 'numeric',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })
+                      : ''}
+                  </div>
+                ))}
+              </div>
+              <p className="note">
+                確認済みにすると、この店舗の未確認の辞退がすべて既読になります。
+              </p>
+              <button
+                className="btn sm pri"
+                disabled={markSeen.isPending}
+                onClick={() => markSeen.mutate()}
+              >
+                {markSeen.isPending ? '処理中…' : 'すべて確認済みにする'}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+      {declErr && (
+        <p className="login-error" role="alert">
+          {declErr}
+        </p>
+      )}
+
       {(asgQ.error || availQ.error) && (
         <p className="login-error" role="alert">
           {asgErrText(asgQ.error ?? availQ.error)}
@@ -1392,6 +1471,11 @@ function BuildView() {
                     {dayOffers.map((o) => {
                       const recs = recsByOffer.get(o.id) ?? []
                       const appliedN = recs.filter((r) => r.response === 'applied').length
+                      const declinedN = recs.filter((r) => r.response === 'declined').length
+                      const pendingN = recs.filter((r) => r.response === 'pending').length
+                      const invitedN = recs.length
+                      const allDeclined =
+                        invitedN > 0 && declinedN === invitedN && pendingN === 0 && appliedN === 0
                       const winner =
                         recs.find((r) => r.response === 'confirmed')?.staff_name ?? null
                       const overdue = o.status === 'open' && new Date(o.deadline_at) < new Date()
@@ -1406,7 +1490,9 @@ function BuildView() {
                                 ? 'oc-expired'
                                 : appliedN > 0
                                   ? 'oc-attn'
-                                  : 'oc-open'
+                                  : allDeclined
+                                    ? 'oc-alldeclined'
+                                    : 'oc-open'
                       const badge =
                         o.status === 'draft'
                           ? '下書き（未送信）'
@@ -1417,8 +1503,12 @@ function BuildView() {
                               : o.status === 'expired'
                                 ? '期限切れ'
                                 : appliedN > 0
-                                  ? `申請 ${appliedN}件・確認待ち`
-                                  : '募集中（承諾待ち）'
+                                  ? `申請 ${appliedN}件・確認待ち${declinedN > 0 ? `・辞退${declinedN}` : ''}`
+                                  : allDeclined
+                                    ? '全員辞退・要対応'
+                                    : declinedN > 0
+                                      ? `承諾待ち・辞退${declinedN}`
+                                      : '募集中（承諾待ち）'
                       return (
                         <button
                           key={o.id}
