@@ -972,6 +972,70 @@ export type Database = {
           },
         ]
       }
+      shift_requirement_overrides: {
+        Row: {
+          created_at: string
+          id: string
+          memo: string | null
+          min_by_kind: Json
+          need_by_position: Json
+          need_count: number
+          store_id: string
+          tenant_id: string
+          time_band_id: string | null
+          updated_at: string
+          work_date: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          memo?: string | null
+          min_by_kind?: Json
+          need_by_position?: Json
+          need_count?: number
+          store_id: string
+          tenant_id: string
+          time_band_id?: string | null
+          updated_at?: string
+          work_date: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          memo?: string | null
+          min_by_kind?: Json
+          need_by_position?: Json
+          need_count?: number
+          store_id?: string
+          tenant_id?: string
+          time_band_id?: string | null
+          updated_at?: string
+          work_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shift_requirement_overrides_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shift_requirement_overrides_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shift_requirement_overrides_time_band_id_fkey"
+            columns: ["time_band_id"]
+            isOneToOne: false
+            referencedRelation: "shift_time_bands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       shift_requirements: {
         Row: {
           created_at: string

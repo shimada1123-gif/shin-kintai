@@ -37,6 +37,8 @@ import {
   DAY_TYPES,
   deleteAssignment,
   deleteAvailability,
+  deleteRequirementOverride,
+  fetchRequirementOverrides,
   fetchStaffDayOffs,
   removeStaffDayOff,
   fetchAssignments,
@@ -57,9 +59,11 @@ import {
   updateAssignment,
   upsertAvailability,
   upsertRequirement,
+  upsertRequirementOverride,
   type AvailKind,
   type AvailRow,
   type DayType,
+  type RequirementOverrideRow,
   type RequirementRow,
   type RosterEntry,
   type ShiftAsg,
@@ -1201,6 +1205,10 @@ function Stepper({
 function RequirementsView() {
   const { me } = useMe()
   const [storeId, setStoreId] = useState('')
+  // 例外日カレンダー（0026）の表示月とエディタ対象日
+  const [ovrMonth, setOvrMonth] = useState(() => new Date())
+  const [ovrEditing, setOvrEditing] = useState<string | null>(null)
+  const mm = useMemo(() => monthMeta(ovrMonth), [ovrMonth])
 
   useEffect(() => {
     if (!storeId && me?.stores.length) setStoreId(me.stores[0].id)
@@ -1210,6 +1218,16 @@ function RequirementsView() {
     queryKey: ['shift_req', storeId],
     enabled: !!storeId,
     queryFn: () => fetchRequirements(storeId),
+  })
+  // 日付上書き（0026・表示月ぶん）。キー接頭辞は BuildView と揃えて一括 invalidate
+  const ovrQ = useQuery({
+    queryKey: ['shift_req_ovr', storeId, 'm', mm.from],
+    enabled: !!storeId,
+    queryFn: () => fetchRequirementOverrides(storeId, mm.from, mm.to),
+  })
+  const holidaysQ = useQuery({
+    queryKey: ['holidays', mm.from],
+    queryFn: () => fetchHolidays(mm.from, mm.to),
   })
 
   const kindsQ = useQuery({ queryKey: ['master', 'kinds'], queryFn: fetchEmploymentKinds })
@@ -1239,6 +1257,14 @@ function RequirementsView() {
     ...r,
     need_by_position: normalizeNeedByPosition(r.need_by_position, allPositions, storeId),
   }))
+  const ovrRows = (ovrQ.data ?? []).map((r) => ({
+    ...r,
+    need_by_position: normalizeNeedByPosition(r.need_by_position, allPositions, storeId),
+  }))
+  const ovrDates = new Set(ovrRows.map((r) => r.work_date))
+  const store = me.stores.find((s) => s.id === storeId)
+  const closedDows = store ? closedDowsOf(store) : []
+  const holidays = holidaysQ.data ?? new Map<string, string>()
 
   return (
     <>
@@ -1295,6 +1321,289 @@ function RequirementsView() {
         出ますが保存はできます）。曜日区分ごとに保存してください。シフト表の作成
         （段階2-b）でこのテンプレートと希望を突き合わせます。
       </p>
+
+      {/* ---------------- 例外日（0026 日付上書き）カレンダー ---------------- */}
+      <div className="page-h ovr-head">
+        <h2 className="ovr-title">例外日（この日だけ変更）</h2>
+        <MonthNav month={ovrMonth} label={mm.label} onChange={setOvrMonth} />
+      </div>
+      <Calendar
+        meta={mm}
+        holidays={holidays}
+        cellOf={(date) => {
+          const dow = new Date(`${date}T00:00:00`).getDay()
+          if (closedDows.includes(dow)) return <span className="cal-closed">定休</span>
+          if (ovrDates.has(date)) return <span className="ovr-mark">✎</span>
+          return null
+        }}
+        onTap={(date) => {
+          const dow = new Date(`${date}T00:00:00`).getDay()
+          if (closedDows.includes(dow)) return // 定休日は上書き対象外（従来どおりグレー扱い）
+          setOvrEditing(date)
+        }}
+      />
+      <p className="note">
+        日付をタップすると、その日だけの必要人数を上書きできます（✎＝上書きあり）。
+        上書きが無い日は曜日区分テンプレの値が使われます。定休日はグレーのまま対象外です。
+      </p>
+
+      {ovrEditing && storeId && (
+        <OverrideEditorModal
+          tenantId={me.tenantId}
+          storeId={storeId}
+          date={ovrEditing}
+          holidayName={holidays.get(ovrEditing) ?? null}
+          bands={bandsQ.data ?? []}
+          positions={storePositions}
+          posNameOf={posNameOf}
+          tplRows={normalizedRows}
+          ovrRows={ovrRows}
+          onClose={() => setOvrEditing(null)}
+        />
+      )}
+    </>
+  )
+}
+
+/* ---------------- 例外日エディタ（0026・カレンダー日タップで開く） ---------------- */
+
+/** 2層解決（確定順）で初期値を出し、保存＝override upsert / テンプレに戻す＝override delete */
+function OverrideEditorModal({
+  tenantId,
+  storeId,
+  date,
+  holidayName,
+  bands,
+  positions,
+  posNameOf,
+  tplRows,
+  ovrRows,
+  onClose,
+}: {
+  tenantId: string
+  storeId: string
+  date: string
+  holidayName: string | null
+  bands: TimeBand[]
+  positions: Position[]
+  posNameOf: (id: string) => string
+  tplRows: RequirementRow[]
+  ovrRows: RequirementOverrideRow[]
+  onClose: () => void
+}) {
+  const [bandId, setBandId] = useState<string | null>(null)
+
+  const dow = new Date(`${date}T00:00:00`).getDay()
+  const dt = dayTypeOf(dow, !!holidayName)
+  const dateLabel = new Date(`${date}T00:00:00`).toLocaleDateString('ja-JP', {
+    month: 'long',
+    day: 'numeric',
+    weekday: 'short',
+  })
+
+  // 確定解決順: ovr[date,band] → ovr[date,通し] → tpl[day_type,band] → tpl[day_type,通し]
+  const ovrAt = (bid: string | null) =>
+    ovrRows.find((r) => r.work_date === date && r.time_band_id === bid) ?? null
+  const tplAt = (bid: string | null) =>
+    tplRows.find((r) => r.day_type === dt && r.time_band_id === bid) ?? null
+  const resolveInit = (bid: string | null) =>
+    (bid ? ovrAt(bid) : null) ?? ovrAt(null) ?? (bid ? tplAt(bid) : null) ?? tplAt(null)
+
+  const tabs: { id: string | null; name: string }[] = [
+    { id: null, name: '通し' },
+    ...bands.map((b) => ({ id: b.id, name: b.name })),
+  ]
+
+  return (
+    <div className="modal show" onClick={onClose} role="dialog" aria-modal="true">
+      <div className="mcard mcard-wide" onClick={(e) => e.stopPropagation()}>
+        <div className="mh">
+          {dateLabel} · この日だけ変更
+          {holidayName && <span className="cal-holiday"> {holidayName}</span>}
+        </div>
+
+        {tabs.length > 1 && (
+          <div className="req-band-tabs">
+            {tabs.map((t) => (
+              <button
+                key={t.id ?? 'all'}
+                type="button"
+                className={`req-band-tab${bandId === t.id ? ' on' : ''}`}
+                onClick={() => setBandId(t.id)}
+              >
+                {t.name}
+                {ovrAt(t.id) && <span className="ovr-mark">✎</span>}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <OverrideRowEditor
+          key={`${date}|${bandId ?? 'all'}`}
+          tenantId={tenantId}
+          storeId={storeId}
+          date={date}
+          bandId={bandId}
+          positions={positions}
+          posNameOf={posNameOf}
+          existing={ovrAt(bandId)}
+          init={resolveInit(bandId)}
+          onClose={onClose}
+        />
+      </div>
+    </div>
+  )
+}
+
+function OverrideRowEditor({
+  tenantId,
+  storeId,
+  date,
+  bandId,
+  positions,
+  posNameOf,
+  existing,
+  init,
+  onClose,
+}: {
+  tenantId: string
+  storeId: string
+  date: string
+  bandId: string | null
+  positions: Position[]
+  posNameOf: (id: string) => string
+  /** この (date, band) にピンポイントで存在する上書き行（テンプレに戻す判定） */
+  existing: RequirementOverrideRow | null
+  /** 2層解決の初期値（テンプレ値のコピー・行単位置換の前提） */
+  init: { need_count: number; need_by_position: Record<string, number>; min_by_kind: Record<string, number>; memo: string | null } | null
+  onClose: () => void
+}) {
+  const qc = useQueryClient()
+  const hasPositions = positions.length > 0
+  const [needByPos, setNeedByPos] = useState<Record<string, number>>(init?.need_by_position ?? {})
+  const [manualNeed, setManualNeed] = useState(init?.need_count ?? 0)
+  const [memo, setMemo] = useState(existing?.memo ?? '')
+  const [error, setError] = useState<string | null>(null)
+
+  const posSum = Object.values(needByPos).reduce((s, v) => s + (v > 0 ? v : 0), 0)
+  const need = hasPositions ? posSum : manualNeed
+
+  const invalidate = () => {
+    void qc.invalidateQueries({ queryKey: ['shift_req_ovr'] })
+  }
+
+  const save = useMutation({
+    mutationFn: () =>
+      upsertRequirementOverride({
+        tenantId,
+        storeId,
+        workDate: date,
+        timeBandId: bandId,
+        needCount: need,
+        needByPosition: hasPositions ? needByPos : {},
+        // 区分別最低は今回エディタを出さず、解決値をそのまま引き継ぐ（行単位置換で消さない）
+        minByKind: init?.min_by_kind ?? {},
+        memo: memo.trim() || null,
+      }),
+    onSuccess: () => {
+      invalidate()
+      onClose()
+    },
+    onError: (e) => setError(reqErrText(e)),
+  })
+
+  const reset = useMutation({
+    mutationFn: () => deleteRequirementOverride({ storeId, workDate: date, timeBandId: bandId }),
+    onSuccess: () => {
+      invalidate()
+      onClose()
+    },
+    onError: (e) => setError(reqErrText(e)),
+  })
+
+  const posSummary = Object.entries(needByPos)
+    .filter(([, v]) => v > 0)
+    .map(([k, v]) => `${posNameOf(k)}${v}`)
+    .join('・')
+
+  return (
+    <>
+      <p className="note ovr-src">
+        {existing
+          ? 'この枠は上書き済みです（保存で更新・「テンプレに戻す」で削除）。'
+          : 'テンプレの値を初期値にしています。保存するとこの日だけ上書きされます。'}
+      </p>
+
+      <div className="req-need ovr-need">
+        <span className="req-lab">必要人数{hasPositions ? '（自動集計）' : ''}</span>
+        {hasPositions ? (
+          <b className="mono req-total">{need}</b>
+        ) : (
+          <Stepper value={manualNeed} onChange={setManualNeed} label="この日の必要人数" />
+        )}
+      </div>
+
+      {hasPositions && (
+        <div className="condrow pos-row">
+          <span className="req-lab">ポジション別</span>
+          {positions.map((p) => (
+            <span key={p.id} className="mm pp">
+              {p.color && <span className="pos-dot" style={{ background: p.color }} />}
+              {p.name}
+              <Stepper
+                value={needByPos[p.id] ?? 0}
+                onChange={(v) => setNeedByPos({ ...needByPos, [p.id]: v })}
+                label={`${p.name}の必要人数`}
+              />
+            </span>
+          ))}
+        </div>
+      )}
+
+      <input
+        className="ri req-memo"
+        value={memo}
+        placeholder="メモ（任意）例）貸切宴会・イベント"
+        onChange={(e) => setMemo(e.target.value)}
+      />
+
+      <div className="condsum note">→ {posSummary || '条件なし'}</div>
+
+      {error && (
+        <p className="login-error" role="alert">
+          {error}
+        </p>
+      )}
+
+      <div className="mbtns">
+        {existing && (
+          <button
+            className="btn sm danger"
+            disabled={reset.isPending || save.isPending}
+            onClick={() => {
+              setError(null)
+              if (confirm('この枠の上書きを削除してテンプレの値に戻します。よろしいですか？')) {
+                reset.mutate()
+              }
+            }}
+          >
+            テンプレに戻す
+          </button>
+        )}
+        <button className="btn sm" onClick={onClose}>
+          閉じる
+        </button>
+        <button
+          className="btn sm pri"
+          disabled={save.isPending || reset.isPending}
+          onClick={() => {
+            setError(null)
+            save.mutate()
+          }}
+        >
+          {save.isPending ? '保存中…' : 'この日だけ保存'}
+        </button>
+      </div>
     </>
   )
 }
@@ -1627,6 +1936,12 @@ function BuildView() {
     enabled: !!storeId,
     queryFn: () => fetchRequirements(storeId),
   })
+  // 日付上書き（0026）。週内のみ取得して2層解決に使う
+  const ovrQ = useQuery({
+    queryKey: ['shift_req_ovr', storeId, week.from],
+    enabled: !!storeId,
+    queryFn: () => fetchRequirementOverrides(storeId, week.from, week.to),
+  })
   const posQ = useQuery({ queryKey: ['master', 'positions'], queryFn: fetchPositions })
   const holidaysQ = useQuery({
     queryKey: ['holidays', week.from, 'wk'],
@@ -1749,10 +2064,25 @@ function BuildView() {
     ...r,
     need_by_position: normalizeNeedByPosition(r.need_by_position, allPositions, storeId),
   }))
-  // 充足度は現段では「通し」行のみ参照（帯別行が入っても挙動不変の後方互換ガード。帯別過不足は次段）
-  const reqByType = new Map(
-    reqRows.filter((r) => r.time_band_id === null).map((r) => [r.day_type, r]),
-  )
+  const ovrRows = (ovrQ.data ?? []).map((r) => ({
+    ...r,
+    need_by_position: normalizeNeedByPosition(r.need_by_position, allPositions, storeId),
+  }))
+  // 2層解決（0026・確定順）: ovr[date,band] → ovr[date,通し] → tpl[day_type,band] → tpl[day_type,通し]
+  // → 定休0は既存UI層のまま。上書き行が見つかった枠は行単位で丸ごと採用（キーのマージはしない）
+  const tplBy = new Map(reqRows.map((r) => [`${r.day_type}|${r.time_band_id ?? 'all'}`, r]))
+  const ovrBy = new Map(ovrRows.map((r) => [`${r.work_date}|${r.time_band_id ?? 'all'}`, r]))
+  const resolveNeed = (
+    date: string,
+    dt: DayType,
+    bandId: string | null,
+  ): { need_count: number; need_by_position: Record<string, number> } | null =>
+    (bandId ? ovrBy.get(`${date}|${bandId}`) : undefined) ??
+    ovrBy.get(`${date}|all`) ??
+    (bandId ? tplBy.get(`${dt}|${bandId}`) : undefined) ??
+    tplBy.get(`${dt}|all`) ??
+    null
+  const hasOvrOn = (date: string) => ovrRows.some((r) => r.work_date === date)
   const holidays = holidaysQ.data ?? new Map<string, string>()
 
   const draftCount = (asgQ.data ?? []).filter((a) => a.status === 'draft').length
@@ -2004,7 +2334,8 @@ function BuildView() {
         {week.days.map((d) => {
           const holiday = holidays.get(d.date)
           const dt = dayTypeOf(d.dow, !!holiday)
-          const req = reqByType.get(dt) ?? null
+          // 0026: 2層解決（通し粒度）。上書きが無い店/日はテンプレそのまま＝従来と同一
+          const req = resolveNeed(d.date, dt, null)
           const dayAsgs = (asgQ.data ?? []).filter((a) => a.work_date === d.date)
           const assignedStaff = new Set(dayAsgs.map((a) => a.staff_id))
           const pool = (availQ.data ?? []).filter(
@@ -2028,6 +2359,11 @@ function BuildView() {
                   <small className="day-dow">（{DOW_LABELS[d.dow]}）</small>
                 </span>
                 {holiday && <span className="cal-holiday">{holiday}</span>}
+                {hasOvrOn(d.date) && (
+                  <span className="ovr-mark" title="この日は必要人数の上書きあり">
+                    ✎
+                  </span>
+                )}
                 {bands.length === 0 && need > 0 && (
                   <span className={`cov-total mono${total >= need ? ' ok' : ' short'}`}>
                     {total}/{need}
@@ -2053,10 +2389,8 @@ function BuildView() {
               {bands.length > 0 && (
                 <div className="band-covs">
                   {bands.map((b) => {
-                    // 帯別要件 → 無ければ通し要件にフォールバック
-                    const bandReq =
-                      reqRows.find((r) => r.day_type === dt && r.time_band_id === b.id) ?? null
-                    const effReq = bandReq ?? req
+                    // 0026: 2層解決（帯粒度）。ovr[date,band]→ovr[date,通し]→tpl[dt,band]→tpl[dt,通し]
+                    const effReq = resolveNeed(d.date, dt, b.id)
                     const needBy = effReq?.need_by_position ?? {}
                     // 重なり判定（簡易版・当日域）: 帯に触れる配置を数える。
                     // 配置は 0-1440 域のみ（深夜跨ぎ保存手段なし）のため帯の1440超部分は実害なし。

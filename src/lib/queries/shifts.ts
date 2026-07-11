@@ -328,6 +328,93 @@ export async function upsertRequirement(a: UpsertRequirementArgs): Promise<void>
   if (error) throw error
 }
 
+/* ------------- 必要人数の日付上書き（0026 shift_requirement_overrides） ------------- */
+// テンプレ(shift_requirements)の"上に重ねる"例外日レイヤ。テンプレ経路は無改変。
+// 解決順(確定): ovr[date,band] → ovr[date,通し] → tpl[day_type,band] → tpl[day_type,通し] → 定休0(UI層)。
+// 防壁は ovr_write = shift_edit ∧ 自店（req型ミラー）。RPCなしのクライアント直接upsert。
+
+export interface RequirementOverrideRow {
+  work_date: string
+  /** null=通し。帯指定はその帯の id（テンプレと同粒度） */
+  time_band_id: string | null
+  need_count: number
+  /** position_id キーのみ（0024踏襲。読取は normalizeNeedByPosition を通す） */
+  need_by_position: Record<string, number>
+  min_by_kind: Record<string, number>
+  memo: string | null
+}
+
+export async function fetchRequirementOverrides(
+  storeId: string,
+  fromDate: string,
+  toDate: string,
+): Promise<RequirementOverrideRow[]> {
+  const supabase = await getSupabase()
+  const { data, error } = await supabase
+    .from('shift_requirement_overrides')
+    .select('work_date, time_band_id, need_count, need_by_position, min_by_kind, memo')
+    .eq('store_id', storeId)
+    .gte('work_date', fromDate)
+    .lte('work_date', toDate)
+  if (error) throw error
+  return (data ?? []).map((r) => ({
+    work_date: r.work_date,
+    time_band_id: r.time_band_id,
+    need_count: r.need_count,
+    need_by_position: (r.need_by_position ?? {}) as Record<string, number>,
+    min_by_kind: (r.min_by_kind ?? {}) as Record<string, number>,
+    memo: r.memo,
+  }))
+}
+
+export interface UpsertRequirementOverrideArgs {
+  tenantId: string
+  storeId: string
+  workDate: string
+  timeBandId: string | null
+  needCount: number
+  needByPosition: Record<string, number>
+  minByKind: Record<string, number>
+  memo: string | null
+}
+
+/** conflict target は 0026 の unique nulls not distinct (store_id, work_date, time_band_id) */
+export async function upsertRequirementOverride(a: UpsertRequirementOverrideArgs): Promise<void> {
+  const supabase = await getSupabase()
+  const { error } = await supabase.from('shift_requirement_overrides').upsert(
+    {
+      tenant_id: a.tenantId,
+      store_id: a.storeId,
+      work_date: a.workDate,
+      time_band_id: a.timeBandId,
+      need_count: Math.max(0, Math.trunc(a.needCount)),
+      need_by_position: cleanCounts(a.needByPosition),
+      min_by_kind: cleanCounts(a.minByKind),
+      memo: a.memo,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'store_id,work_date,time_band_id' },
+  )
+  if (error) throw error
+}
+
+/** 「テンプレに戻す」＝該当 (store, date, band) の上書き行を削除 */
+export async function deleteRequirementOverride(a: {
+  storeId: string
+  workDate: string
+  timeBandId: string | null
+}): Promise<void> {
+  const supabase = await getSupabase()
+  let q = supabase
+    .from('shift_requirement_overrides')
+    .delete()
+    .eq('store_id', a.storeId)
+    .eq('work_date', a.workDate)
+  q = a.timeBandId === null ? q.is('time_band_id', null) : q.eq('time_band_id', a.timeBandId)
+  const { error } = await q
+  if (error) throw error
+}
+
 /** 要件保存のRLS違反を具体的な日本語に */
 export function reqErrText(e: unknown): string {
   if (e instanceof Error) {

@@ -4689,3 +4689,34 @@ span.posman-dot {
   color: #2c5e40;
   white-space: nowrap;
 }
+
+/* ---------------- 例外日（0026 必要人数の日付上書き） ---------------- */
+
+.ovr-head {
+  margin-top: 18px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ovr-title {
+  font-size: 15px;
+  margin: 0;
+}
+
+.ovr-mark {
+  color: var(--gold, #b8860b);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.ovr-src {
+  margin: 6px 0;
+}
+
+.ovr-need {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+}
