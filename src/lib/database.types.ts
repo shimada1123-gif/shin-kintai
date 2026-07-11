@@ -1520,6 +1520,17 @@ export type Database = {
       app_can_store: { Args: { sid: string }; Returns: boolean }
       app_has_perm: { Args: { perm: string; tid: string }; Returns: boolean }
       app_is_member: { Args: { tid: string }; Returns: boolean }
+      app_labor_cost: {
+        Args: { p_from: string; p_store_id: string; p_to: string }
+        Returns: {
+          cost_yen: number
+          excluded_count: number
+          staff_count: number
+          status: string
+          total_min: number
+          work_date: string
+        }[]
+      }
       app_my_offers: {
         Args: never
         Returns: {

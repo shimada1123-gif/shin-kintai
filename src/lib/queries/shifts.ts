@@ -523,6 +523,37 @@ export async function createAssignment(a: CreateAsgArgs): Promise<void> {
   if (error) throw error
 }
 
+/* ---------------- C-2: 人件費概算（0027 app_labor_cost・集計のみ） ---------------- */
+
+/** 集計6列のみ（個別staff_id/個別額/個別時給は構造上返らない） */
+export interface LaborCostRow {
+  work_date: string
+  status: string // 'draft' | 'published'
+  total_min: number
+  staff_count: number
+  cost_yen: number
+  excluded_count: number
+}
+
+/**
+ * 日別×status の人件費集計。呼び出し者JWT（ガード=labor_cost_view ∧ app_can_store は関数側）。
+ * 対象は保存済み shift_assignments のみ（未保存草案は含まれない）。
+ */
+export async function fetchLaborCost(
+  storeId: string,
+  fromDay: string,
+  toDay: string,
+): Promise<LaborCostRow[]> {
+  const supabase = await getSupabase()
+  const { data, error } = await supabase.rpc('app_labor_cost', {
+    p_store_id: storeId,
+    p_from: fromDay,
+    p_to: toDay,
+  })
+  if (error) throw error
+  return (data ?? []) as LaborCostRow[]
+}
+
 /* ---------------- C-1c: 自動シフト草案の一括保存（draftのみ） ---------------- */
 
 export interface SaveDraftRow {

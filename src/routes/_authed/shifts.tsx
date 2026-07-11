@@ -43,6 +43,7 @@ import {
   removeStaffDayOff,
   fetchAssignments,
   fetchHolidays,
+  fetchLaborCost,
   fetchMyAvailability,
   fetchMyShifts,
   fetchMyStores,
@@ -1903,6 +1904,9 @@ function dayTypeOf(dow: number, isHoliday: boolean): DayType {
 function BuildView({ onGoDayoff }: { onGoDayoff?: () => void }) {
   const { me } = useMe()
   const qc = useQueryClient()
+  // C-2: 人件費は labor_cost_view 保持者のみ（表示ガード＋クエリenabledの二重）
+  const perms = usePermissions()
+  const canSeeCost = perms.has('labor_cost_view')
   const [storeId, setStoreId] = useState('')
   const [weekBase, setWeekBase] = useState(() => new Date())
   const [pubMsg, setPubMsg] = useState<string | null>(null)
@@ -2016,6 +2020,13 @@ function BuildView({ onGoDayoff }: { onGoDayoff?: () => void }) {
     queryKey: ['store_skills', storeId],
     enabled: !!storeId,
     queryFn: () => fetchStoreSkills(storeId),
+  })
+  // C-2: 人件費集計（保存済みのみ・集計6列）。非保持者は呼ばない（enabled）。
+  // asgQ.dataUpdatedAt をキーに含める＝配置の追加/編集/削除/保存/確定のどの経路でも再取得され金額が追随する
+  const costQ = useQuery({
+    queryKey: ['labor_cost', storeId, week.from, asgQ.dataUpdatedAt],
+    enabled: !!storeId && canSeeCost && asgQ.dataUpdatedAt > 0,
+    queryFn: () => fetchLaborCost(storeId, week.from, week.to),
   })
   // オファー枠（RLS so_sel/sor_sel = 管理者スコープ）。招待行は週内全枠ぶんを一括取得
   const offersQ = useQuery({
@@ -2292,6 +2303,35 @@ function BuildView({ onGoDayoff }: { onGoDayoff?: () => void }) {
   const draftCount = (asgQ.data ?? []).filter((a) => a.status === 'draft').length
   const pubCount = (asgQ.data ?? []).filter((a) => a.status === 'published').length
 
+  // C-2: 週集計（status別）＋日別辞書。app_labor_cost の集計行のみが素材（個別額は存在しない）
+  const hrs = (min: number) => Math.round((min / 60) * 10) / 10 // weekHours と同じ丸め表現
+  const yen = (n: number) => `¥${n.toLocaleString('ja-JP')}`
+  const costAgg = (() => {
+    if (!canSeeCost || !costQ.data) return null
+    const mk = () => ({ min: 0, yen: 0 })
+    const sum = { draft: mk(), published: mk() }
+    let excluded = 0
+    const byDate = new Map<string, { min: number; yen: number }>()
+    for (const r of costQ.data) {
+      const t = r.status === 'published' ? sum.published : sum.draft
+      t.min += r.total_min
+      t.yen += r.cost_yen
+      excluded += r.excluded_count
+      const d = byDate.get(r.work_date) ?? mk()
+      d.min += r.total_min
+      d.yen += r.cost_yen
+      byDate.set(r.work_date, d)
+    }
+    return {
+      totalMin: sum.draft.min + sum.published.min,
+      totalYen: sum.draft.yen + sum.published.yen,
+      draft: sum.draft,
+      published: sum.published,
+      excluded,
+      byDate,
+    }
+  })()
+
   return (
     <>
       <div className="filter-row">
@@ -2431,6 +2471,30 @@ function BuildView({ onGoDayoff }: { onGoDayoff?: () => void }) {
         <p className="login-error" role="alert">
           {autoErr}
         </p>
+      )}
+
+      {/* C-2: 人件費概算（labor_cost_view 保持者のみ・保存済みのみ・集計値のみ） */}
+      {canSeeCost && costAgg && (costAgg.totalMin > 0 || costAgg.excluded > 0) && (
+        <div className="cost-summary">
+          <b>人件費（概算・保存済みのみ）</b>
+          <span className="mono">
+            合計 {hrs(costAgg.totalMin)}h・{yen(costAgg.totalYen)}
+          </span>
+          <span className="cost-detail mono">
+            下書き {hrs(costAgg.draft.min)}h・{yen(costAgg.draft.yen)} ／ 確定{' '}
+            {hrs(costAgg.published.min)}h・{yen(costAgg.published.yen)}
+          </span>
+          {costAgg.excluded > 0 && (
+            <span className="note">
+              月給・時給未設定の配置 {costAgg.excluded} 件は概算対象外です
+            </span>
+          )}
+          {plan && (
+            <span className="note">
+              未保存の草案は概算に含まれません（保存すると反映されます）
+            </span>
+          )}
+        </div>
       )}
 
       {(draftPrevQ.data?.total_offers ?? 0) > 0 && (
@@ -2647,6 +2711,19 @@ function BuildView({ onGoDayoff }: { onGoDayoff?: () => void }) {
                   </span>
                 )}
               </div>
+
+              {/* C-2: 日別の人時/概算（保持者のみ・保存済みのみ） */}
+              {canSeeCost &&
+                costAgg &&
+                (() => {
+                  const c = costAgg.byDate.get(d.date)
+                  if (!c || c.min === 0) return null
+                  return (
+                    <div className="day-cost mono">
+                      人時 {hrs(c.min)}h・{yen(c.yen)}
+                    </div>
+                  )
+                })()}
 
               {/* 帯未定義の店: 現行の通し充足度チップ（後方互換・無変更） */}
               {bands.length === 0 && req && Object.keys(req.need_by_position).length > 0 && (

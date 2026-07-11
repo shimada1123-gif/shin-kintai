@@ -4837,3 +4837,28 @@ span.posman-dot {
   font-size: 11px;
   max-width: 90px;
 }
+
+/* ---------------- C-2 人件費概算（labor_cost_view 保持者のみ描画） ---------------- */
+
+.cost-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin: 8px 0;
+  font-size: 12px;
+  background: var(--card, #fff);
+}
+
+.cost-detail {
+  color: var(--muted, #667);
+}
+
+.day-cost {
+  font-size: 10px;
+  color: var(--muted, #667);
+  margin: 2px 0 4px;
+}
