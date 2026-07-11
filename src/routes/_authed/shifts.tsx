@@ -24,6 +24,7 @@ import {
   fetchEmploymentKinds,
   fetchPositions,
   fetchStaffList,
+  fetchStoreSkills,
   fetchTimeBands,
   type Position,
   type TimeBand,
@@ -2334,6 +2335,18 @@ function OfferModal({
   const [msg, setMsg] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
 
+  // スキルchip（0025・読取のみ）: 「このポジションで募集」の枠なら、候補に可否を可視化
+  const skillsQ = useQuery({
+    queryKey: ['store_skills', offer.store_id],
+    enabled: !!offer.position_id,
+    queryFn: () => fetchStoreSkills(offer.store_id),
+  })
+  const canOffered = (staffId: string) =>
+    !!offer.position_id &&
+    (skillsQ.data ?? []).some(
+      (s) => s.staff_id === staffId && s.position_id === offer.position_id && s.can,
+    )
+
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ['offers'] })
     void qc.invalidateQueries({ queryKey: ['offer_recipients'] })
@@ -2435,6 +2448,9 @@ function OfferModal({
             <div key={r.id} className={`offer-app resp-${r.response}`}>
               <div className="offer-app-top">
                 <b>{r.staff_name}</b>
+                {canOffered(r.staff_id) && (
+                  <span className="skill-chip">{positionName}○</span>
+                )}
                 <span className={`badge resp-badge-${r.response}`}>
                   {OFFER_RESPONSE_LABEL[r.response]}
                 </span>
@@ -2538,6 +2554,29 @@ function AddStaffModal({
 
   const toggle = (list: string[], v: string): string[] =>
     list.includes(v) ? list.filter((x) => x !== v) : [...list, v]
+
+  // スキルchip（0025 app_store_skills・読取のみ）。候補限定（有効position×ロースター）は関数側で済み
+  const skillsQ = useQuery({
+    queryKey: ['store_skills', storeId],
+    queryFn: () => fetchStoreSkills(storeId),
+  })
+  const canBy = new Map((skillsQ.data ?? []).map((r) => [`${r.staff_id}|${r.position_id}`, r.can]))
+  const posNameOf = (id: string) => positions.find((p) => p.id === id)?.name ?? ''
+  /** can=true のポジションchip。positionId 指定時はその1つだけ（「このポジションで募集」文脈） */
+  const skillChips = (staffId: string, positionId?: string) => {
+    const ids = positionId ? [positionId] : positions.map((p) => p.id)
+    const hit = ids.filter((pid) => canBy.get(`${staffId}|${pid}`) === true)
+    if (hit.length === 0) return null
+    return (
+      <span className="skill-chips">
+        {hit.map((pid) => (
+          <span key={pid} className="skill-chip">
+            {posNameOf(pid)}○
+          </span>
+        ))}
+      </span>
+    )
+  }
 
   const qcModal = useQueryClient()
   const send = useMutation({
@@ -2709,6 +2748,7 @@ function AddStaffModal({
                     <span>
                       {s.name}
                       {s.kindLabel && <span className="muted-tag">{s.kindLabel}</span>}
+                      {skillChips(s.staffId, offPos || undefined)}
                     </span>
                   </label>
                 ))}
@@ -2761,6 +2801,7 @@ function AddStaffModal({
               >
                 <b>{s.name}</b>
                 {s.kindLabel && <span className="muted-tag">{s.kindLabel}</span>}
+                {skillChips(s.staffId)}
                 <span className={`roster-avail ra-${av?.kind ?? 'none'}`}>
                   {av === null && '未提出'}
                   {av?.kind === 'avail' && '○ 終日OK'}

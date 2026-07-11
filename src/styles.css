@@ -4605,3 +4605,87 @@ span.posman-dot {
   margin-right: 3px;
   vertical-align: baseline;
 }
+
+/* ---------------- スキル設定カード（0025 staff_skills） ---------------- */
+
+.skills-wrap {
+  overflow-x: auto;
+  margin-bottom: 8px;
+}
+
+.skills-table {
+  border-collapse: collapse;
+  font-size: 12px;
+  min-width: 100%;
+}
+
+.skills-table th,
+.skills-table td {
+  padding: 3px 6px;
+  border-bottom: 1px solid var(--line);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.skills-table thead th {
+  font-weight: 600;
+  font-size: 11px;
+}
+
+.skills-name {
+  text-align: left !important;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.skill-cell {
+  width: 40px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  position: relative;
+  padding: 0;
+}
+
+.skill-cell.on {
+  background: var(--green-soft, #e2f0e6);
+  border-color: var(--green, #3f7f56);
+  color: var(--green, #3f7f56);
+  font-weight: 700;
+}
+
+.skill-cell.ro {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.skill-default {
+  position: absolute;
+  right: 1px;
+  bottom: 0;
+  font-size: 8px;
+  color: var(--muted, #8a939b);
+  font-weight: 400;
+}
+
+/* 候補一覧のスキルchip（＋スタッフ追加/オファー） */
+.skill-chips {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: 4px;
+}
+
+.skill-chip {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--green-soft, #e2f0e6);
+  color: #2c5e40;
+  white-space: nowrap;
+}

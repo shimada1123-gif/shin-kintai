@@ -81,6 +81,8 @@ export interface RosterEntry {
   kindLabel: string | null
   /** 社員区分か（employment_kinds.is_regular・0022/0023） */
   isRegular: boolean
+  /** 既定ポジション（staff_assignments.position_default_id・スキル表の「既定」印用） */
+  positionDefaultId: string | null
 }
 
 /**
@@ -100,6 +102,7 @@ export async function fetchStoreRoster(storeId: string): Promise<RosterEntry[]> 
     name: r.full_name,
     kindLabel: r.kind_label ?? null,
     isRegular: r.is_regular === true,
+    positionDefaultId: r.position_default_id ?? null,
   }))
   rows.sort((a, b) => a.name.localeCompare(b.name, 'ja'))
   return rows

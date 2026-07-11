@@ -20,10 +20,12 @@ import {
   fetchStaffPage,
   fetchStores,
   fetchStoresPage,
+  fetchStoreSkills,
   fetchTimeBands,
   reorderPositions,
   saveStore,
   setPositionActive,
+  setSkill,
   updateEmploymentKind,
   updateStoreClosedDows,
   upsertPosition,
@@ -31,8 +33,9 @@ import {
   type Position,
   type StaffWithDetails,
   type Store,
+  type StoreSkillRow,
 } from '@/lib/queries/master'
-import { hhmmToMin, minToLabel } from '@/lib/queries/shifts'
+import { fetchStoreRoster, hhmmToMin, minToLabel, type RosterEntry } from '@/lib/queries/shifts'
 
 export const Route = createFileRoute('/_authed/staff')({
   component: MasterPage,
@@ -264,6 +267,13 @@ function MasterPage() {
             positions={posQ.data ?? []}
             stores={storesQ.data ?? []}
             loading={posQ.isPending}
+            canEdit={canEdit}
+          />
+
+          <SkillsCard
+            tenantId={me.tenantId}
+            positions={posQ.data ?? []}
+            stores={storesQ.data ?? []}
             canEdit={canEdit}
           />
 
@@ -1119,6 +1129,172 @@ function PositionsCard({
       <p className="note">
         使わなくなったポジションは<b>無効化</b>してください（削除はしません＝過去のシフト・
         必要人数の表示を守るため）。<b>共通</b>のポジションへの変更は全店に反映されます。
+      </p>
+    </div>
+  )
+}
+
+/* ---------------- スキル設定（staff_skills・0025） ---------------- */
+// 行=その店のロースター（app_store_roster）× 列=その店の有効ポジション。
+// セルタップで can トグル（app_set_skill・呼び出し者JWT）。level は将来枠＝今回非表示。
+
+function SkillsCard({
+  tenantId,
+  positions,
+  stores,
+  canEdit,
+}: {
+  tenantId: string
+  positions: Position[]
+  stores: Store[]
+  canEdit: boolean
+}) {
+  const qc = useQueryClient()
+  const [storeId, setStoreId] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!storeId && stores.length) setStoreId(stores[0].id)
+  }, [stores, storeId])
+
+  const rosterQ = useQuery({
+    queryKey: ['store_roster', storeId],
+    enabled: !!storeId,
+    queryFn: () => fetchStoreRoster(storeId),
+  })
+  const skillsQ = useQuery({
+    queryKey: ['store_skills', storeId],
+    enabled: !!storeId,
+    queryFn: () => fetchStoreSkills(storeId),
+  })
+
+  // 列: その店の有効ポジション（0024 マージ表示と同規則）。行: ロースター（roster の並び流用）
+  const cols = positions
+    .filter((p) => (p.store_id === null || p.store_id === storeId) && p.is_active)
+    .sort((a, b) => a.sort_order - b.sort_order)
+  const roster = rosterQ.data ?? []
+  const canBy = new Map((skillsQ.data ?? []).map((r) => [`${r.staff_id}|${r.position_id}`, r.can]))
+
+  // 楽観更新: 先にキャッシュのセルを書き換え、失敗時は snapshot へロールバック＋エラー表示
+  const toggle = useMutation({
+    mutationFn: (a: { staffId: string; positionId: string; can: boolean }) =>
+      setSkill({ tenantId, staffId: a.staffId, positionId: a.positionId, can: a.can }),
+    onMutate: async (a) => {
+      const key = ['store_skills', storeId]
+      await qc.cancelQueries({ queryKey: key })
+      const prev = qc.getQueryData<StoreSkillRow[]>(key)
+      qc.setQueryData<StoreSkillRow[]>(key, (old) => {
+        const list = old ?? []
+        const i = list.findIndex(
+          (r) => r.staff_id === a.staffId && r.position_id === a.positionId,
+        )
+        if (i >= 0) {
+          const cp = [...list]
+          cp[i] = { ...cp[i], can: a.can }
+          return cp
+        }
+        return [...list, { staff_id: a.staffId, position_id: a.positionId, can: a.can, level: null }]
+      })
+      return { prev }
+    },
+    onError: (e, _a, ctx) => {
+      if (ctx?.prev) qc.setQueryData(['store_skills', storeId], ctx.prev)
+      setError(errText(e, 'スキルの保存に失敗しました'))
+    },
+    onSettled: () => void qc.invalidateQueries({ queryKey: ['store_skills', storeId] }),
+  })
+
+  const dotCls = (r: RosterEntry) =>
+    r.isRegular ? 'wg-dot-reg' : (r.kindLabel ?? '').includes('パート') ? 'wg-dot-part' : 'wg-dot-arb'
+
+  return (
+    <div className="card">
+      <div className="card-title">スキル設定</div>
+      {error && (
+        <p className="login-error" role="alert">
+          {error}
+        </p>
+      )}
+
+      {stores.length > 1 && (
+        <label className="field posman-store">
+          <span>店舗</span>
+          <select value={storeId} onChange={(e) => setStoreId(e.target.value)}>
+            {stores.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
+      {(rosterQ.isPending || skillsQ.isPending) && !!storeId && <p className="note">読み込み中…</p>}
+
+      {cols.length === 0 && !rosterQ.isPending && (
+        <p className="perm-banner" role="status">
+          ポジション未登録です。上の「ポジション」カードで登録すると、スキル表を組めます。
+        </p>
+      )}
+      {cols.length > 0 && !rosterQ.isPending && roster.length === 0 && (
+        <p className="perm-banner" role="status">
+          この店舗にスタッフが配置されていません。スタッフ追加後に設定してください。
+        </p>
+      )}
+
+      {cols.length > 0 && roster.length > 0 && (
+        <div className="skills-wrap">
+          <table className="skills-table">
+            <thead>
+              <tr>
+                <th />
+                {cols.map((p) => (
+                  <th key={p.id}>
+                    {p.color && <span className="pos-dot" style={{ background: p.color }} />}
+                    {p.name}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {roster.map((r) => (
+                <tr key={r.staffId}>
+                  <th className="skills-name">
+                    <i className={`wg-dot ${dotCls(r)}`} />
+                    {r.name}
+                  </th>
+                  {cols.map((p) => {
+                    const can = canBy.get(`${r.staffId}|${p.id}`) === true
+                    const isDefault = r.positionDefaultId === p.id
+                    return (
+                      <td key={p.id}>
+                        <button
+                          type="button"
+                          className={`skill-cell${can ? ' on' : ''}${canEdit ? '' : ' ro'}`}
+                          aria-label={`${r.name}の${p.name}: ${can ? '可' : '不可'}`}
+                          disabled={!canEdit}
+                          onClick={() => {
+                            if (!canEdit) return
+                            setError(null)
+                            toggle.mutate({ staffId: r.staffId, positionId: p.id, can: !can })
+                          }}
+                        >
+                          {can ? '○' : ''}
+                          {isDefault && <small className="skill-default">既定</small>}
+                        </button>
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <p className="note">
+        ○＝そのポジションに入れる人。シフト作成のオファー候補・自動割付（今後）の判断に使います。
+        「既定」はスタッフ登録時の既定ポジション（可否とは独立）。
       </p>
     </div>
   )

@@ -1273,6 +1273,61 @@ export type Database = {
           },
         ]
       }
+      staff_skills: {
+        Row: {
+          can: boolean
+          created_at: string
+          id: string
+          level: number | null
+          position_id: string
+          staff_id: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          can?: boolean
+          created_at?: string
+          id?: string
+          level?: number | null
+          position_id: string
+          staff_id: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          can?: boolean
+          created_at?: string
+          id?: string
+          level?: number | null
+          position_id?: string
+          staff_id?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_skills_position_id_fkey"
+            columns: ["position_id"]
+            isOneToOne: false
+            referencedRelation: "positions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_skills_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_skills_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       staff_tags: {
         Row: {
           created_at: string
@@ -1438,6 +1493,16 @@ export type Database = {
         }
         Returns: undefined
       }
+      app_set_skill: {
+        Args: {
+          p_can: boolean
+          p_level: number
+          p_position_id: string
+          p_staff_id: string
+          p_tenant_id: string
+        }
+        Returns: string
+      }
       app_staff_id: { Args: { tid: string }; Returns: string }
       app_staff_see_corr: { Args: { tid: string }; Returns: boolean }
       app_store_roster: {
@@ -1451,6 +1516,15 @@ export type Database = {
           kind_label: string
           position_default_id: string
           requires_clock: boolean
+          staff_id: string
+        }[]
+      }
+      app_store_skills: {
+        Args: { p_store_id: string }
+        Returns: {
+          can: boolean
+          level: number
+          position_id: string
           staff_id: string
         }[]
       }

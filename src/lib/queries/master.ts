@@ -375,6 +375,45 @@ export async function setPositionActive(
   if (error) throw error
 }
 
+/* ---------- スキル表（0025 staff_skills・呼び出し者JWT） ---------- */
+// service_role では叩かない（app_has_perm / app_can_store が auth.uid() ベース）
+
+export interface StoreSkillRow {
+  staff_id: string
+  position_id: string
+  can: boolean
+  level: number | null
+}
+
+/** スキル1セルの upsert（can トグル）。level は将来枠＝当面 null 固定 */
+export async function setSkill(a: {
+  tenantId: string
+  staffId: string
+  positionId: string
+  can: boolean
+  level?: number | null
+}): Promise<string> {
+  const supabase = await getSupabase()
+  // 生成型は p_level を non-null number で吐くが、SQL 側は smallint null 許容（将来枠）
+  const { data, error } = await supabase.rpc('app_set_skill', {
+    p_tenant_id: a.tenantId,
+    p_staff_id: a.staffId,
+    p_position_id: a.positionId,
+    p_can: a.can,
+    p_level: (a.level ?? null) as number,
+  })
+  if (error) throw error
+  return data as string
+}
+
+/** 店単位のスキル一覧。候補限定（その店ロースター×有効position）は関数側で済み */
+export async function fetchStoreSkills(storeId: string): Promise<StoreSkillRow[]> {
+  const supabase = await getSupabase()
+  const { data, error } = await supabase.rpc('app_store_skills', { p_store_id: storeId })
+  if (error) throw error
+  return (data ?? []) as StoreSkillRow[]
+}
+
 /** 区分の部分更新（is_regular=社員区分フラグ等）。防壁は ek_write=staff_master_edit */
 export async function updateEmploymentKind(
   id: string,
