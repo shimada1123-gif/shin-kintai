@@ -658,6 +658,33 @@ export interface StaffDayOffRow {
   kind: string
 }
 
+/**
+ * C-0: 自動シフトのハードゲート（社員の公休を先に固定）。純関数・決定的。
+ * 解除条件: 各社員(regulars)が対象週内に「定休日(closedDows)以外の日」の明示的公休を1件以上持つ。
+ * - kind(public/paid/other)は不問＝全て休みとしてカウント（公休タブ 976-988 のカウント規則と同一）。
+ * - 定休日上の行は充足に数えない（公休タブ「定休日は個別の公休には数えません」と一致）。
+ * - regulars 0人 → ok=true（ゲート対象なし・自動通過）。
+ * - missing は regulars の元順序（roster順）を保つ＝決定的。
+ */
+export function gateAutoShift(
+  regulars: { staffId: string; name: string }[],
+  dayOffs: { staff_id: string; work_date: string }[],
+  weekDays: string[],
+  closedDows: number[],
+): { ok: boolean; missing: { staffId: string; name: string }[] } {
+  if (regulars.length === 0) return { ok: true, missing: [] }
+  const days = new Set(weekDays)
+  const dowOf = (date: string) => new Date(`${date}T00:00:00`).getDay()
+  const satisfied = new Set<string>()
+  for (const o of dayOffs) {
+    if (days.has(o.work_date) && !closedDows.includes(dowOf(o.work_date))) {
+      satisfied.add(o.staff_id)
+    }
+  }
+  const missing = regulars.filter((r) => !satisfied.has(r.staffId))
+  return { ok: missing.length === 0, missing }
+}
+
 /** その店・期間の公休。sdo_sel（管理者=自店全件 / 本人=自分の分）に従う */
 export async function fetchStaffDayOffs(
   storeId: string,

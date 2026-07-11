@@ -4720,3 +4720,21 @@ span.posman-dot {
   gap: 8px;
   margin: 6px 0;
 }
+
+/* ---------------- C-0 自動シフトゲート ---------------- */
+
+.autoshift-btn {
+  margin-left: auto;
+}
+
+.gate-panel {
+  border: 1px solid var(--gold, #b8860b);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin: 8px 0;
+  background: var(--gold-soft, #fbf3dc);
+}
+
+.gate-panel .dop-list {
+  margin: 6px 0;
+}

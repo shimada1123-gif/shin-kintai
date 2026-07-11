@@ -49,6 +49,7 @@ import {
   fetchRequirements,
   fetchStoreAvailability,
   fetchStoreRoster,
+  gateAutoShift,
   getShiftNotifyPreview,
   hhmmToMin,
   minToHHMM,
@@ -211,7 +212,7 @@ function ShiftsPage() {
       ) : tab === 'myshift' && hasSelf ? (
         <MyShiftView />
       ) : tab === 'build' && canEdit ? (
-        <BuildView />
+        <BuildView onGoDayoff={() => setTab('dayoff')} />
       ) : tab === 'req' && canEdit ? (
         <RequirementsView />
       ) : tab === 'dayoff' && canEdit ? (
@@ -1890,13 +1891,14 @@ function dayTypeOf(dow: number, isHoliday: boolean): DayType {
   return 'weekday'
 }
 
-function BuildView() {
+function BuildView({ onGoDayoff }: { onGoDayoff?: () => void }) {
   const { me } = useMe()
   const qc = useQueryClient()
   const [storeId, setStoreId] = useState('')
   const [weekBase, setWeekBase] = useState(() => new Date())
   const [pubMsg, setPubMsg] = useState<string | null>(null)
   const [pubErr, setPubErr] = useState<string | null>(null)
+  const [autoMsg, setAutoMsg] = useState<string | null>(null)
   const [editing, setEditing] = useState<
     | { mode: 'create'; date: string; staffId: string; staffName: string; avail: AvailRow | null }
     | { mode: 'edit'; asg: ShiftAsg }
@@ -1952,6 +1954,12 @@ function BuildView() {
     queryKey: ['store_roster', storeId],
     enabled: !!storeId,
     queryFn: () => fetchStoreRoster(storeId),
+  })
+  // C-0: 自動シフトゲート用の週内公休（公休タブと同じ ['staff_dayoff'] 接頭辞＝設定時に自動再取得）
+  const dayoffQ = useQuery({
+    queryKey: ['staff_dayoff', storeId, week.from, 'wk'],
+    enabled: !!storeId,
+    queryFn: () => fetchStaffDayOffs(storeId, week.from, week.to),
   })
   // オファー枠（RLS so_sel/sor_sel = 管理者スコープ）。招待行は週内全枠ぶんを一括取得
   const offersQ = useQuery({
@@ -2085,6 +2093,19 @@ function BuildView() {
   const hasOvrOn = (date: string) => ovrRows.some((r) => r.work_date === date)
   const holidays = holidaysQ.data ?? new Map<string, string>()
 
+  // C-0: 自動シフトのハードゲート（社員の公休先行固定）。判定は純関数 gateAutoShift
+  const store = me.stores.find((s) => s.id === storeId)
+  const closedDows = store ? closedDowsOf(store) : []
+  const regulars = (rosterQ.data ?? []).filter((r) => r.isRegular)
+  const gate = gateAutoShift(
+    regulars,
+    dayoffQ.data ?? [],
+    week.days.map((d) => d.date),
+    closedDows,
+  )
+  // 読込中の誤表示（全員未設定に見える等）を避ける: 判定材料が揃うまで非活性・パネル非表示
+  const gateReady = !rosterQ.isPending && !dayoffQ.isPending && !!storeId
+
   const draftCount = (asgQ.data ?? []).filter((a) => a.status === 'draft').length
   const pubCount = (asgQ.data ?? []).filter((a) => a.status === 'published').length
 
@@ -2154,7 +2175,44 @@ function BuildView() {
             {pubErr}
           </span>
         )}
+        <button
+          className="btn sm autoshift-btn"
+          disabled={!gateReady || !gate.ok}
+          title={gateReady && !gate.ok ? '社員の公休設定が必要です' : undefined}
+          onClick={() =>
+            // C-1（割付エンジン）で結線。C-0はゲートの活性/非活性まで
+            setAutoMsg('自動シフト（草案生成）は準備中です。次の更新で有効になります。')
+          }
+        >
+          ⚙ 自動シフト
+        </button>
+        {autoMsg && <span className="note">{autoMsg}</span>}
       </div>
+
+      {/* C-0: ゲート未解除の案内パネル（社員の公休が先・未設定者リスト＋公休タブ導線） */}
+      {gateReady && !gate.ok && (
+        <div className="gate-panel">
+          <div className="dop-head">
+            <b>自動シフトの前に、社員の公休を設定してください</b>
+          </div>
+          <div className="dop-list">
+            {gate.missing.map((m) => (
+              <span key={m.staffId} className="dop-rec">
+                {m.name}さん…この週の公休が未設定
+              </span>
+            ))}
+          </div>
+          <p className="note">
+            社員の休みを先に固定してから、アルバイト・パートを割り付けます。
+            定休日は個別の公休には数えません。
+          </p>
+          {onGoDayoff && (
+            <button className="btn sm" onClick={onGoDayoff}>
+              公休タブで設定する
+            </button>
+          )}
+        </div>
+      )}
 
       {(draftPrevQ.data?.total_offers ?? 0) > 0 && (
         <div className="draft-offers-panel">
