@@ -4738,3 +4738,102 @@ span.posman-dot {
 .gate-panel .dop-list {
   margin: 6px 0;
 }
+
+/* ---------------- C-1b 自動シフト草案プレビュー ---------------- */
+
+.plan-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  border: 1px dashed var(--blue, #3b6e8f);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin: 8px 0;
+  background: rgb(59 110 143 / 6%);
+}
+
+.auto-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 999px;
+  border: 1px dashed var(--blue, #3b6e8f);
+  color: var(--blue, #3b6e8f);
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+.plan-count {
+  font-size: 12px;
+}
+
+.plan-lack {
+  color: var(--red, #b23a20);
+  font-weight: 700;
+}
+
+.day-plan {
+  border-top: 1px dashed var(--blue, #3b6e8f);
+  margin-top: 6px;
+  padding-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.plan-lab {
+  font-size: 10px;
+  color: var(--blue, #3b6e8f);
+  font-weight: 600;
+}
+
+.plan-asg {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1.5px dashed var(--blue, #3b6e8f);
+  border-radius: 8px;
+  padding: 2px 6px;
+  font-size: 11px;
+  background: rgb(59 110 143 / 5%);
+}
+
+.plan-x {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--muted, #8a939b);
+  font-size: 12px;
+  padding: 0 2px;
+  margin-left: auto;
+}
+
+.plan-x:hover {
+  color: var(--red, #b23a20);
+}
+
+.plan-band {
+  font-size: 9px;
+  padding: 1px 4px;
+  border-radius: 999px;
+  background: var(--line, #e3e7ea);
+}
+
+.plan-short {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1.5px dashed var(--red, #b23a20);
+  border-radius: 8px;
+  padding: 2px 6px;
+  font-size: 11px;
+  color: var(--red, #b23a20);
+  font-weight: 600;
+  background: rgb(178 58 32 / 6%);
+}
+
+.plan-add {
+  font-size: 11px;
+  max-width: 90px;
+}

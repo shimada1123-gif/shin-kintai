@@ -71,6 +71,13 @@ import {
   type StaffDayOffRow,
 } from '@/lib/queries/shifts'
 import { ymd } from '@/lib/worktime'
+import {
+  buildAutoShift,
+  createEligibility,
+  type AutoAssignment,
+  type AutoNeed,
+  type BuildAutoShiftInput,
+} from '@/lib/auto-shift'
 
 export const Route = createFileRoute('/_authed/shifts')({
   component: ShiftsPage,
@@ -1899,6 +1906,11 @@ function BuildView({ onGoDayoff }: { onGoDayoff?: () => void }) {
   const [pubMsg, setPubMsg] = useState<string | null>(null)
   const [pubErr, setPubErr] = useState<string | null>(null)
   const [autoMsg, setAutoMsg] = useState<string | null>(null)
+  // C-1b: 自動シフト草案（未保存プレビュー）。入力スナップショット＋草案配列。DBには一切書かない
+  const [plan, setPlan] = useState<{
+    input: BuildAutoShiftInput
+    assignments: AutoAssignment[]
+  } | null>(null)
   const [editing, setEditing] = useState<
     | { mode: 'create'; date: string; staffId: string; staffName: string; avail: AvailRow | null }
     | { mode: 'edit'; asg: ShiftAsg }
@@ -1922,6 +1934,12 @@ function BuildView({ onGoDayoff }: { onGoDayoff?: () => void }) {
   useEffect(() => {
     if (!storeId && me?.stores.length) setStoreId(me.stores[0].id)
   }, [me?.stores, storeId])
+
+  // 店・週が変わったら草案は破棄（別入力のプレビューを持ち越さない）
+  useEffect(() => {
+    setPlan(null)
+    setAutoMsg(null)
+  }, [storeId, week.from])
 
   const asgQ = useQuery({
     queryKey: ['shift_asg', storeId, week.from],
@@ -1960,6 +1978,12 @@ function BuildView({ onGoDayoff }: { onGoDayoff?: () => void }) {
     queryKey: ['staff_dayoff', storeId, week.from, 'wk'],
     enabled: !!storeId,
     queryFn: () => fetchStaffDayOffs(storeId, week.from, week.to),
+  })
+  // C-1b: 割付候補のスキル判定（0025 can）
+  const skillsQ = useQuery({
+    queryKey: ['store_skills', storeId],
+    enabled: !!storeId,
+    queryFn: () => fetchStoreSkills(storeId),
   })
   // オファー枠（RLS so_sel/sor_sel = 管理者スコープ）。招待行は週内全枠ぶんを一括取得
   const offersQ = useQuery({
@@ -2106,6 +2130,108 @@ function BuildView({ onGoDayoff }: { onGoDayoff?: () => void }) {
   // 読込中の誤表示（全員未設定に見える等）を避ける: 判定材料が揃うまで非活性・パネル非表示
   const gateReady = !rosterQ.isPending && !dayoffQ.isPending && !!storeId
 
+  /* ---------------- C-1b: 草案生成（⚙結線）・派生計算・手修正 ---------------- */
+  const nameOf = new Map((rosterQ.data ?? []).map((r) => [r.staffId, r.name]))
+  const bandName = (id: string | null) => (id ? (bands.find((b) => b.id === id)?.name ?? null) : null)
+
+  // ⚙押下: 入力を組み立てて buildAutoShift（純関数・DB非書込）。再押下=同入力なら同結果（決定的）
+  const runAutoShift = () => {
+    const needs: AutoNeed[] = []
+    for (const d of week.days) {
+      if (closedDows.includes(d.dow)) continue // 定休日はスロットなし
+      const dt = dayTypeOf(d.dow, !!holidays.get(d.date))
+      const bandIds: (string | null)[] = bands.length > 0 ? bands.map((b) => b.id) : [null]
+      for (const bid of bandIds) {
+        const eff = resolveNeed(d.date, dt, bid) // 0026 の2層解決をそのまま展開元に
+        if (!eff || Object.keys(eff.need_by_position).length === 0) continue
+        needs.push({ date: d.date, bandId: bid, needByPosition: eff.need_by_position })
+      }
+    }
+    const input: BuildAutoShiftInput = {
+      weekDays: week.days.map((d) => d.date),
+      needs,
+      bands: bands.map((b) => ({ id: b.id, startMin: b.start_min, endMin: b.end_min })),
+      positions: positions.map((p) => ({ id: p.id, sortOrder: p.sort_order })),
+      availRows: availQ.data ?? [],
+      skillMap: new Map((skillsQ.data ?? []).map((s) => [`${s.staff_id}|${s.position_id}`, s.can])),
+      roster: (rosterQ.data ?? []).map((r) => ({
+        staffId: r.staffId,
+        positionDefaultId: r.positionDefaultId,
+      })),
+      dayoffRows: dayoffQ.data ?? [],
+      closedDows,
+      // openMin/closeMin: 店営業時間のマスタが無いため未指定＝エンジン側フォールバック(17:00-22:00)
+    }
+    setAutoMsg(null)
+    setPlan({ input, assignments: buildAutoShift(input).assignments })
+  }
+
+  // 草案の派生値（不足・手動追加候補）。手修正のたびにここで再計算される
+  const planDerived = (() => {
+    if (!plan) return null
+    const elig = createEligibility(plan.input)
+    const assignedCount = new Map<string, number>()
+    for (const a of plan.assignments) {
+      const k = `${a.date}|${a.bandId ?? 'all'}|${a.positionId}`
+      assignedCount.set(k, (assignedCount.get(k) ?? 0) + 1)
+    }
+    const shorts: {
+      date: string
+      bandId: string | null
+      positionId: string
+      lack: number
+      reason: string
+      addable: { staffId: string; name: string }[]
+    }[] = []
+    for (const n of plan.input.needs) {
+      for (const [pid, cnt] of Object.entries(n.needByPosition)) {
+        const lack =
+          Math.trunc(cnt) - (assignedCount.get(`${n.date}|${n.bandId ?? 'all'}|${pid}`) ?? 0)
+        if (lack <= 0) continue
+        const eligibleAll = plan.input.roster.filter((r) =>
+          elig.isEligible(r, n.date, n.bandId, pid),
+        )
+        const usedInBand = new Set(
+          plan.assignments
+            .filter((a) => a.date === n.date && (a.bandId ?? 'all') === (n.bandId ?? 'all'))
+            .map((a) => a.staffId),
+        )
+        const addable = eligibleAll
+          .filter((r) => !usedInBand.has(r.staffId))
+          .map((r) => ({ staffId: r.staffId, name: nameOf.get(r.staffId) ?? r.staffId }))
+        const reason =
+          eligibleAll.length === 0
+            ? '候補なし（希望○/△・スキル・公休の条件を満たす人がいません）'
+            : addable.length === 0
+              ? '候補は他の枠で充足済み'
+              : '手動で追加できます'
+        shorts.push({ date: n.date, bandId: n.bandId, positionId: pid, lack, reason, addable })
+      }
+    }
+    return {
+      elig,
+      shorts,
+      lack: shorts.reduce((s, x) => s + x.lack, 0),
+    }
+  })()
+
+  // 手修正（ローカルstateの草案配列のみ編集。DB非書込）
+  const removePlanAsg = (idx: number) => {
+    if (!plan) return
+    setPlan({ ...plan, assignments: plan.assignments.filter((_, i) => i !== idx) })
+  }
+  const addPlanAsg = (date: string, bandId: string | null, positionId: string, staffId: string) => {
+    if (!plan || !planDerived) return
+    const t = planDerived.elig.timesOf(bandId)
+    setPlan({
+      ...plan,
+      assignments: [
+        ...plan.assignments,
+        { staffId, date, bandId, positionId, startMin: t.startMin, endMin: t.endMin, source: 'auto' },
+      ],
+    })
+  }
+
   const draftCount = (asgQ.data ?? []).filter((a) => a.status === 'draft').length
   const pubCount = (asgQ.data ?? []).filter((a) => a.status === 'published').length
 
@@ -2177,16 +2303,12 @@ function BuildView({ onGoDayoff }: { onGoDayoff?: () => void }) {
         )}
         <button
           className="btn sm autoshift-btn"
-          disabled={!gateReady || !gate.ok}
+          disabled={!gateReady || !gate.ok || availQ.isPending || skillsQ.isPending}
           title={gateReady && !gate.ok ? '社員の公休設定が必要です' : undefined}
-          onClick={() =>
-            // C-1（割付エンジン）で結線。C-0はゲートの活性/非活性まで
-            setAutoMsg('自動シフト（草案生成）は準備中です。次の更新で有効になります。')
-          }
+          onClick={runAutoShift} // C-1b: 草案生成（純関数・DB非書込）。再押下=再生成
         >
           ⚙ 自動シフト
         </button>
-        {autoMsg && <span className="note">{autoMsg}</span>}
       </div>
 
       {/* C-0: ゲート未解除の案内パネル（社員の公休が先・未設定者リスト＋公休タブ導線） */}
@@ -2211,6 +2333,38 @@ function BuildView({ onGoDayoff }: { onGoDayoff?: () => void }) {
               公休タブで設定する
             </button>
           )}
+        </div>
+      )}
+
+      {/* C-1b: 草案サマリ（未保存のプレビュー）。保存は C-1c＝今回はプレースホルダ */}
+      {plan && planDerived && (
+        <div className="plan-summary">
+          <b>
+            自動シフト草案<span className="auto-badge">auto</span>
+          </b>
+          <span className="note">未保存のプレビューです（下の各日に破線で表示）</span>
+          <span className="mono plan-count">
+            充足 {plan.assignments.length} / <span className={planDerived.lack > 0 ? 'plan-lack' : ''}>不足 {planDerived.lack}</span>
+          </span>
+          <button
+            className="btn sm"
+            onClick={() => {
+              setPlan(null)
+              setAutoMsg(null)
+            }}
+          >
+            クリア
+          </button>
+          <button
+            className="btn sm pri"
+            onClick={() =>
+              // C-1c で shift_assignments(draft) への一括保存を実装。今回は保存経路なし
+              setAutoMsg('草案の保存は次の更新で有効化されます（C-1c）。')
+            }
+          >
+            この草案を保存
+          </button>
+          {autoMsg && <span className="note">{autoMsg}</span>}
         </div>
       )}
 
@@ -2583,6 +2737,72 @@ function BuildView({ onGoDayoff }: { onGoDayoff?: () => void }) {
                 ))}
                 {dayAsgs.length === 0 && <span className="note day-empty">未配置</span>}
               </div>
+
+              {/* C-1b: 草案レイヤ（実配置とは別物のプレビュー。破線＋autoバッジ・DB非書込） */}
+              {plan &&
+                planDerived &&
+                (() => {
+                  const dayPlan = plan.assignments
+                    .map((a, i) => ({ a, i }))
+                    .filter((x) => x.a.date === d.date)
+                  const dayShorts = planDerived.shorts.filter((s) => s.date === d.date)
+                  if (dayPlan.length === 0 && dayShorts.length === 0) return null
+                  return (
+                    <div className="day-plan">
+                      <div className="plan-lab">
+                        草案<span className="auto-badge">auto</span>
+                      </div>
+                      {dayPlan.map(({ a, i }) => (
+                        <span key={i} className="plan-asg">
+                          <b>{nameOf.get(a.staffId) ?? a.staffId}</b>
+                          <span className="mono asg-time">
+                            {minToHHMM(a.startMin)}-{minToHHMM(a.endMin)}
+                          </span>
+                          {bandName(a.bandId) && (
+                            <span className="plan-band">{bandName(a.bandId)}</span>
+                          )}
+                          {posName(a.positionId) && (
+                            <span className="asg-pos">{posName(a.positionId)}</span>
+                          )}
+                          <button
+                            type="button"
+                            className="plan-x"
+                            aria-label="この草案配置を外す"
+                            onClick={() => removePlanAsg(i)}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                      {dayShorts.map((s, j) => (
+                        <span key={j} className="plan-short" title={s.reason}>
+                          {bandName(s.bandId) && (
+                            <span className="plan-band">{bandName(s.bandId)}</span>
+                          )}
+                          {posName(s.positionId)} 不足{s.lack}
+                          {s.addable.length > 0 && (
+                            <select
+                              className="plan-add"
+                              value=""
+                              aria-label="この枠に手動で追加"
+                              onChange={(e) => {
+                                if (e.target.value)
+                                  addPlanAsg(s.date, s.bandId, s.positionId, e.target.value)
+                              }}
+                            >
+                              <option value="">＋追加</option>
+                              {s.addable.map((c) => (
+                                <option key={c.staffId} value={c.staffId}>
+                                  {c.name}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                  )
+                })()}
 
               {pool.length > 0 && (
                 <div className="day-pool">

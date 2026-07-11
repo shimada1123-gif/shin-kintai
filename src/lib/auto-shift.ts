@@ -105,29 +105,25 @@ function dowOf(date: string): number {
   return new Date(`${date}T00:00:00`).getDay()
 }
 
-/* ------------------------------ 本体 ------------------------------ */
+/* --------------------------- 候補判定（共有） --------------------------- */
 
-export function buildAutoShift(input: BuildAutoShiftInput): BuildAutoShiftResult {
-  const {
-    weekDays,
-    needs,
-    bands,
-    positions,
-    availRows,
-    skillMap,
-    roster,
-    dayoffRows,
-    closedDows,
-  } = input
-
-  /* --- 辞書化（全て決定的な参照） --- */
-  const weekSet = new Set(weekDays)
-  const bandById = new Map(bands.map((b) => [b.id, b]))
-  const posSort = new Map(positions.map((p) => [p.id, p.sortOrder]))
-  const availBy = new Map(availRows.map((a) => [`${a.staff_id}|${a.work_date}`, a]))
-  const dayoffSet = new Set(dayoffRows.map((o) => `${o.staff_id}|${o.work_date}`))
-
+/**
+ * C-1b: プレビューの手修正（空き枠への手動追加候補・不足理由の再計算）でも
+ * buildAutoShift と同一の候補規則を使うためのファクトリ。ロジックは C-1a のまま
+ * （抽出のみ・挙動不変はユニットテストで担保）。
+ */
+export function createEligibility(input: BuildAutoShiftInput): {
   /** ② 生成配置時刻は帯が決める。帯なし=営業時間 or 17:00-22:00。跨ぎは 1439 クリップ */
+  timesOf: (bandId: string | null) => { startMin: number; endMin: number }
+  /** 候補判定（スロットの人選候補になれるか。割付状況は見ない静的判定） */
+  isEligible: (staff: AutoRosterEntry, date: string, bandId: string | null, positionId: string) => boolean
+  /** 希望の種別（タイブレーク用。候補確定後に呼ぶ前提） */
+  availKindOf: (staffId: string, date: string) => 'avail' | 'partial' | 'off' | null
+} {
+  const bandById = new Map(input.bands.map((b) => [b.id, b]))
+  const availBy = new Map(input.availRows.map((a) => [`${a.staff_id}|${a.work_date}`, a]))
+  const dayoffSet = new Set(input.dayoffRows.map((o) => `${o.staff_id}|${o.work_date}`))
+
   const timesOf = (bandId: string | null): { startMin: number; endMin: number } => {
     if (bandId !== null) {
       const b = bandById.get(bandId)
@@ -139,12 +135,11 @@ export function buildAutoShift(input: BuildAutoShiftInput): BuildAutoShiftResult
     return { startMin: Math.min(s, DAY_MAX_MIN), endMin: Math.min(e, DAY_MAX_MIN) }
   }
 
-  /** 候補判定（スロットの人選候補になれるか。割付状況は見ない静的判定） */
   const isEligible = (staff: AutoRosterEntry, date: string, bandId: string | null, positionId: string): boolean => {
     // 公休（C-0 と同じく明示行で判定。定休日はスロット展開側で丸ごと除外済み）
     if (dayoffSet.has(`${staff.staffId}|${date}`)) return false
     // ③ スキル: can===true のみ（行なし=未設定=候補外）
-    if (skillMap.get(`${staff.staffId}|${positionId}`) !== true) return false
+    if (input.skillMap.get(`${staff.staffId}|${positionId}`) !== true) return false
     // 希望: 行なし=未提出=候補外 / off=候補外
     const av = availBy.get(`${staff.staffId}|${date}`)
     if (!av || av.kind === 'off') return false
@@ -153,6 +148,21 @@ export function buildAutoShift(input: BuildAutoShiftInput): BuildAutoShiftResult
     const t = timesOf(bandId)
     return av.start_min !== null && av.end_min !== null && av.start_min <= t.startMin && av.end_min >= t.endMin
   }
+
+  const availKindOf = (staffId: string, date: string) => availBy.get(`${staffId}|${date}`)?.kind ?? null
+
+  return { timesOf, isEligible, availKindOf }
+}
+
+/* ------------------------------ 本体 ------------------------------ */
+
+export function buildAutoShift(input: BuildAutoShiftInput): BuildAutoShiftResult {
+  const { weekDays, needs, positions, roster, closedDows } = input
+
+  /* --- 辞書化（全て決定的な参照） --- */
+  const weekSet = new Set(weekDays)
+  const posSort = new Map(positions.map((p) => [p.id, p.sortOrder]))
+  const { timesOf, isEligible, availKindOf } = createEligibility(input)
 
   /* --- 1. スロット展開: (date, band, position) × 必要人数ぶん複製 --- */
   interface Slot {
@@ -226,7 +236,7 @@ export function buildAutoShift(input: BuildAutoShiftInput): BuildAutoShiftResult
     }
     // タイブレーク（この順で完全決定化）: avail>partial → 既定ポジ一致 → 週割当分少 → staffId昇順
     const kindRank = (r: AutoRosterEntry) =>
-      availBy.get(`${r.staffId}|${slot.date}`)!.kind === 'avail' ? 0 : 1
+      availKindOf(r.staffId, slot.date) === 'avail' ? 0 : 1
     const pick = [...free].sort(
       (x, y) =>
         kindRank(x) - kindRank(y) ||
