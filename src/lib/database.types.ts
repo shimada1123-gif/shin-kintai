@@ -562,23 +562,32 @@ export type Database = {
       }
       positions: {
         Row: {
+          color: string | null
           created_at: string
           id: string
+          is_active: boolean
           name: string
+          sort_order: number
           store_id: string | null
           tenant_id: string
         }
         Insert: {
+          color?: string | null
           created_at?: string
           id?: string
+          is_active?: boolean
           name: string
+          sort_order?: number
           store_id?: string | null
           tenant_id: string
         }
         Update: {
+          color?: string | null
           created_at?: string
           id?: string
+          is_active?: boolean
           name?: string
+          sort_order?: number
           store_id?: string | null
           tenant_id?: string
         }
@@ -1415,7 +1424,20 @@ export type Database = {
       app_offer_confirm: { Args: { p_recipient_id: string }; Returns: Json }
       app_offer_decline: { Args: { p_token: string }; Returns: Json }
       app_offer_expire_due: { Args: never; Returns: number }
+      app_reorder_positions: {
+        Args: { p_ids: string[]; p_tenant_id: string }
+        Returns: undefined
+      }
       app_role: { Args: { tid: string }; Returns: string }
+      app_set_position_active: {
+        Args: {
+          p_active: boolean
+          p_id: string
+          p_store_id: string
+          p_tenant_id: string
+        }
+        Returns: undefined
+      }
       app_staff_id: { Args: { tid: string }; Returns: string }
       app_staff_see_corr: { Args: { tid: string }; Returns: boolean }
       app_store_roster: {
@@ -1433,6 +1455,16 @@ export type Database = {
         }[]
       }
       app_tenant_test_mode: { Args: { tid: string }; Returns: boolean }
+      app_upsert_position: {
+        Args: {
+          p_color: string
+          p_id: string
+          p_name: string
+          p_store_id: string
+          p_tenant_id: string
+        }
+        Returns: string
+      }
       seed_role_permissions: { Args: { tid: string }; Returns: undefined }
     }
     Enums: {

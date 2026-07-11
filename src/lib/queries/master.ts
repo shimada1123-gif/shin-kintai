@@ -324,6 +324,57 @@ export async function deleteEmploymentKind(id: string): Promise<void> {
   if (error) throw error
 }
 
+/* ---------- ポジション自由化（0024 RPC・呼び出し者JWT） ---------- */
+// service_role では叩かない（app_has_perm が auth.uid() ベースのため必ず forbidden になる）
+
+/** 追加(id=null)/改名・色変更(id指定)。store_id(スコープ)は変更不可。戻り値=対象id */
+export async function upsertPosition(a: {
+  tenantId: string
+  storeId: string | null
+  id: string | null
+  name: string
+  color: string | null
+}): Promise<string> {
+  const supabase = await getSupabase()
+  // 生成型は RPC 引数を non-null で吐くが、SQL 側は null 許容（p_id=null=新規 / p_store_id=null=共通 / p_color=null=色なし）
+  const { data, error } = await supabase.rpc('app_upsert_position', {
+    p_tenant_id: a.tenantId,
+    p_store_id: a.storeId as string,
+    p_id: a.id as string,
+    p_name: a.name,
+    p_color: a.color as string,
+  })
+  if (error) throw error
+  return data as string
+}
+
+/** 並べ替え（配列順で sort_order 再採番）。全テナント分の並びを渡す */
+export async function reorderPositions(tenantId: string, ids: string[]): Promise<void> {
+  const supabase = await getSupabase()
+  const { error } = await supabase.rpc('app_reorder_positions', {
+    p_tenant_id: tenantId,
+    p_ids: ids,
+  })
+  if (error) throw error
+}
+
+/** 無効化/復活。0件ガード（最低1つ）は関数側で例外になる */
+export async function setPositionActive(
+  tenantId: string,
+  storeId: string,
+  id: string,
+  active: boolean,
+): Promise<void> {
+  const supabase = await getSupabase()
+  const { error } = await supabase.rpc('app_set_position_active', {
+    p_tenant_id: tenantId,
+    p_store_id: storeId,
+    p_id: id,
+    p_active: active,
+  })
+  if (error) throw error
+}
+
 /** 区分の部分更新（is_regular=社員区分フラグ等）。防壁は ek_write=staff_master_edit */
 export async function updateEmploymentKind(
   id: string,

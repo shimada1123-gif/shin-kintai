@@ -11,11 +11,9 @@ import { usePermissions } from '@/lib/perm'
 import {
   closedDowsOf,
   createEmploymentKind,
-  createPosition,
   createStaff,
   createTimeBand,
   deleteEmploymentKind,
-  deletePosition,
   deleteTimeBand,
   fetchEmploymentKinds,
   fetchPositions,
@@ -23,10 +21,14 @@ import {
   fetchStores,
   fetchStoresPage,
   fetchTimeBands,
+  reorderPositions,
   saveStore,
+  setPositionActive,
   updateEmploymentKind,
   updateStoreClosedDows,
+  upsertPosition,
   type Assignment,
+  type Position,
   type StaffWithDetails,
   type Store,
 } from '@/lib/queries/master'
@@ -849,6 +851,20 @@ function EmploymentKindsCard({
   )
 }
 
+/* ---------------- ポジション管理（0024 自由化） ---------------- */
+// 追加/改名/色/並替/無効化はすべて SECURITY DEFINER RPC（呼び出し者JWT）。物理削除UIは置かない。
+
+const POSITION_COLORS = [
+  '#3B6E8F',
+  '#5A8F6E',
+  '#C9642A',
+  '#8A5A9F',
+  '#B23A20',
+  '#C9A961',
+  '#4A7C8C',
+  '#7A6A55',
+]
+
 function PositionsCard({
   tenantId,
   positions,
@@ -857,31 +873,69 @@ function PositionsCard({
   canEdit,
 }: {
   tenantId: string
-  positions: { id: string; name: string; store_id: string | null }[]
+  positions: Position[]
   stores: Store[]
   loading: boolean
   canEdit: boolean
 }) {
   const qc = useQueryClient()
-  const [name, setName] = useState('')
   const [storeId, setStoreId] = useState('')
+  const [name, setName] = useState('')
+  const [addCommon, setAddCommon] = useState(false) // 既定は店舗専用。チェックで全店共通
+  const [editing, setEditing] = useState<{ id: string; name: string } | null>(null)
+  const [colorOpen, setColorOpen] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const invalidate = () => void qc.invalidateQueries({ queryKey: ['master', 'positions'] })
 
-  const add = useMutation({
-    mutationFn: () => createPosition(tenantId, name, storeId || null),
+  useEffect(() => {
+    if (!storeId && stores.length) setStoreId(stores[0].id)
+  }, [stores, storeId])
+
+  // テナント全体のグローバル順。並替はこの順を保ったまま2件だけ入替え、全件のid配列を送る
+  const globalSorted = [...positions].sort(
+    (a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, 'ja'),
+  )
+  const visible = globalSorted.filter((p) => p.store_id === null || p.store_id === storeId)
+
+  const upsert = useMutation({
+    mutationFn: (a: { id: string | null; storeId: string | null; name: string; color: string | null }) =>
+      upsertPosition({ tenantId, storeId: a.storeId, id: a.id, name: a.name, color: a.color }),
     onSuccess: () => {
       setName('')
+      setEditing(null)
+      setColorOpen(null)
       invalidate()
     },
-    onError: (e) => setError(errText(e, 'ポジションの追加に失敗しました')),
+    onError: (e) => setError(errText(e, 'ポジションの保存に失敗しました')),
   })
 
-  const del = useMutation({
-    mutationFn: deletePosition,
+  const reorder = useMutation({
+    mutationFn: (ids: string[]) => reorderPositions(tenantId, ids),
     onSuccess: invalidate,
-    onError: (e) => setError(errText(e, 'ポジションの削除に失敗しました')),
+    onError: (e) => setError(errText(e, '並べ替えに失敗しました')),
   })
+
+  const setActive = useMutation({
+    mutationFn: (a: { id: string; active: boolean }) =>
+      setPositionActive(tenantId, storeId, a.id, a.active),
+    onSuccess: invalidate,
+    // 0件ガード（有効なポジションを最低1つ残してください）は関数側の例外がここに落ちる
+    onError: (e) => setError(errText(e, '無効化/復活に失敗しました')),
+  })
+
+  const busy = upsert.isPending || reorder.isPending || setActive.isPending
+
+  const move = (id: string, dir: -1 | 1) => {
+    const idxV = visible.findIndex((p) => p.id === id)
+    const other = visible[idxV + dir]
+    if (!other) return
+    const ids = globalSorted.map((p) => p.id)
+    const i = ids.indexOf(id)
+    const j = ids.indexOf(other.id)
+    ;[ids[i], ids[j]] = [ids[j], ids[i]]
+    setError(null)
+    reorder.mutate(ids)
+  }
 
   return (
     <div className="card">
@@ -893,43 +947,179 @@ function PositionsCard({
         </p>
       )}
 
-      <div className="chip-list">
-        {positions.length === 0 && <span className="note">未登録です。</span>}
-        {positions.map((p) => (
-          <span key={p.id} className="tagchip">
-            {p.name}
-            <span className="chip-note">
-              {p.store_id ? (stores.find((s) => s.id === p.store_id)?.name ?? '店舗') : '全店共通'}
-            </span>
-            {canEdit && (
-              <span className="x" role="button" onClick={() => del.mutate(p.id)}>
-                ×
-              </span>
-            )}
-          </span>
-        ))}
-      </div>
-
-      {canEdit && (
-        <div className="inline-add">
-          <input
-            value={name}
-            placeholder="例）キッチン / フロア"
-            onChange={(e) => setName(e.target.value)}
-          />
+      {stores.length > 1 && (
+        <label className="field posman-store">
+          <span>店舗の表示</span>
           <select value={storeId} onChange={(e) => setStoreId(e.target.value)}>
-            <option value="">全店共通</option>
             {stores.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
               </option>
             ))}
           </select>
-          <button className="btn sm" disabled={!name || add.isPending} onClick={() => add.mutate()}>
+        </label>
+      )}
+
+      <div className="posman-list">
+        {visible.length === 0 && !loading && <span className="note">未登録です。</span>}
+        {visible.map((p, i) => (
+          <div key={p.id} className={`posman-row${p.is_active ? '' : ' off'}`}>
+            {canEdit ? (
+              <button
+                type="button"
+                className="posman-dot"
+                style={{ background: p.color ?? 'var(--line, #cfd6dc)' }}
+                title="色を変更"
+                aria-label={`${p.name}の色を変更`}
+                onClick={() => setColorOpen(colorOpen === p.id ? null : p.id)}
+              />
+            ) : (
+              <span
+                className="posman-dot"
+                style={{ background: p.color ?? 'var(--line, #cfd6dc)' }}
+              />
+            )}
+
+            {editing?.id === p.id ? (
+              <>
+                <input
+                  className="posman-rename"
+                  value={editing.name}
+                  autoFocus
+                  onChange={(e) => setEditing({ id: p.id, name: e.target.value })}
+                />
+                <button
+                  className="btn sm pri"
+                  disabled={!editing.name.trim() || busy}
+                  onClick={() => {
+                    setError(null)
+                    upsert.mutate({ id: p.id, storeId: p.store_id, name: editing.name, color: p.color })
+                  }}
+                >
+                  保存
+                </button>
+                <button className="btn sm" onClick={() => setEditing(null)}>
+                  取消
+                </button>
+              </>
+            ) : (
+              <>
+                <span className="posman-name">{p.name}</span>
+                {p.store_id === null && (
+                  <span className="posman-badge" title="改名・色・無効化は全店に反映されます">
+                    共通
+                  </span>
+                )}
+                {!p.is_active && <span className="posman-badge inactive">無効</span>}
+                {canEdit && (
+                  <span className="posman-ops">
+                    <button
+                      className="btn sm"
+                      aria-label="上へ"
+                      disabled={i === 0 || busy}
+                      onClick={() => move(p.id, -1)}
+                    >
+                      ↑
+                    </button>
+                    <button
+                      className="btn sm"
+                      aria-label="下へ"
+                      disabled={i === visible.length - 1 || busy}
+                      onClick={() => move(p.id, 1)}
+                    >
+                      ↓
+                    </button>
+                    <button
+                      className="btn sm"
+                      onClick={() => setEditing({ id: p.id, name: p.name })}
+                    >
+                      改名
+                    </button>
+                    <button
+                      className="btn sm"
+                      disabled={busy}
+                      onClick={() => {
+                        setError(null)
+                        setActive.mutate({ id: p.id, active: !p.is_active })
+                      }}
+                    >
+                      {p.is_active ? '無効化' : '復活'}
+                    </button>
+                  </span>
+                )}
+              </>
+            )}
+
+            {canEdit && colorOpen === p.id && (
+              <div className="posman-palette">
+                {POSITION_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    className={`posman-swatch${p.color === c ? ' on' : ''}`}
+                    style={{ background: c }}
+                    aria-label={`色 ${c}`}
+                    disabled={busy}
+                    onClick={() => {
+                      setError(null)
+                      upsert.mutate({ id: p.id, storeId: p.store_id, name: p.name, color: c })
+                    }}
+                  />
+                ))}
+                <button
+                  type="button"
+                  className="btn sm"
+                  disabled={busy}
+                  onClick={() => {
+                    setError(null)
+                    upsert.mutate({ id: p.id, storeId: p.store_id, name: p.name, color: null })
+                  }}
+                >
+                  色なし
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {canEdit && (
+        <div className="inline-add posman-add">
+          <input
+            value={name}
+            placeholder="例）キッチン / フロア"
+            onChange={(e) => setName(e.target.value)}
+          />
+          <label className="posman-common">
+            <input
+              type="checkbox"
+              checked={addCommon}
+              onChange={(e) => setAddCommon(e.target.checked)}
+            />
+            全店共通
+          </label>
+          <button
+            className="btn sm"
+            disabled={!name.trim() || busy || (!addCommon && !storeId)}
+            onClick={() => {
+              setError(null)
+              upsert.mutate({
+                id: null,
+                storeId: addCommon ? null : storeId,
+                name,
+                color: null,
+              })
+            }}
+          >
             ＋ 追加
           </button>
         </div>
       )}
+
+      <p className="note">
+        使わなくなったポジションは<b>無効化</b>してください（削除はしません＝過去のシフト・
+        必要人数の表示を守るため）。<b>共通</b>のポジションへの変更は全店に反映されます。
+      </p>
     </div>
   )
 }

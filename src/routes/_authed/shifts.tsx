@@ -25,6 +25,7 @@ import {
   fetchPositions,
   fetchStaffList,
   fetchTimeBands,
+  type Position,
   type TimeBand,
 } from '@/lib/queries/master'
 import {
@@ -48,6 +49,7 @@ import {
   getShiftNotifyPreview,
   hhmmToMin,
   minToHHMM,
+  normalizeNeedByPosition,
   publishWeek,
   reqErrText,
   sendShiftNotifications,
@@ -853,7 +855,9 @@ function WeekGridView() {
       {editing && storeId && (
         <AsgEditorModal
           storeId={storeId}
-          positions={positions.filter((p) => p.store_id === null || p.store_id === storeId)}
+          positions={positions
+            .filter((p) => (p.store_id === null || p.store_id === storeId) && p.is_active)
+            .sort((a, b) => a.sort_order - b.sort_order)}
           editing={editing}
           onClose={() => setEditing(null)}
         />
@@ -1222,10 +1226,18 @@ function RequirementsView() {
   // まずは requires_clock=true の主要区分を出す）
   const kindLabels = (kindsQ.data ?? []).filter((k) => k.requires_clock).map((k) => k.label)
 
-  // B案の主軸: この店舗のポジション（全店共通 + 店舗専用）
-  const positionNames = (posQ.data ?? [])
-    .filter((p) => p.store_id === null || p.store_id === storeId)
-    .map((p) => p.name)
+  // B案の主軸: この店舗の有効ポジション（全店共通 + 店舗専用・sort_order昇順）。0024で id キー運用
+  const allPositions = posQ.data ?? []
+  const storePositions = allPositions
+    .filter((p) => (p.store_id === null || p.store_id === storeId) && p.is_active)
+    .sort((a, b) => a.sort_order - b.sort_order)
+  const posNameOf = (id: string) => allPositions.find((p) => p.id === id)?.name ?? '(不明)'
+
+  // 後方互換シム: 旧・名前キーの need_by_position を id キーに正規化してから使う
+  const normalizedRows = (reqQ.data ?? []).map((r) => ({
+    ...r,
+    need_by_position: normalizeNeedByPosition(r.need_by_position, allPositions, storeId),
+  }))
 
   return (
     <>
@@ -1253,7 +1265,7 @@ function RequirementsView() {
       )}
       {reqQ.isPending && !!storeId && <p className="note">読み込み中…</p>}
 
-      {positionNames.length === 0 && !posQ.isPending && (
+      {storePositions.length === 0 && !posQ.isPending && (
         <p className="perm-banner" role="status">
           ポジションが未登録です。スタッフ・店舗ページでポジション（キッチン/フロア等）を
           登録すると、ポジション別に必要人数を組めます。それまでは全体人数のみの入力になります。
@@ -1269,9 +1281,10 @@ function RequirementsView() {
             dayLabel={dt.label}
             badgeCls={dt.badgeCls}
             kindLabels={kindLabels}
-            positionNames={positionNames}
+            positions={storePositions}
+            posNameOf={posNameOf}
             bands={bandsQ.data ?? []}
-            rows={reqQ.data}
+            rows={normalizedRows}
           />
         ))}
 
@@ -1292,7 +1305,8 @@ function RequirementDayCard({
   dayLabel,
   badgeCls,
   kindLabels,
-  positionNames,
+  positions,
+  posNameOf,
   bands,
   rows,
 }: {
@@ -1301,7 +1315,8 @@ function RequirementDayCard({
   dayLabel: string
   badgeCls: string
   kindLabels: string[]
-  positionNames: string[]
+  positions: Position[]
+  posNameOf: (id: string) => string
   bands: TimeBand[]
   rows: RequirementRow[]
 }) {
@@ -1342,7 +1357,8 @@ function RequirementDayCard({
       dayLabel={dayLabel}
       badgeCls={badgeCls}
       kindLabels={kindLabels}
-      positionNames={positionNames}
+      positions={positions}
+      posNameOf={posNameOf}
       initial={initial}
       bandTabs={bandTabs}
     />
@@ -1356,7 +1372,8 @@ function RequirementRowEditor({
   dayLabel,
   badgeCls,
   kindLabels,
-  positionNames,
+  positions,
+  posNameOf,
   initial,
   bandTabs,
 }: {
@@ -1366,13 +1383,14 @@ function RequirementRowEditor({
   dayLabel: string
   badgeCls: string
   kindLabels: string[]
-  positionNames: string[]
+  positions: Position[]
+  posNameOf: (id: string) => string
   initial: RequirementRow | null
   bandTabs?: React.ReactNode
 }) {
   const { me } = useMe()
   const qc = useQueryClient()
-  const hasPositions = positionNames.length > 0
+  const hasPositions = positions.length > 0
   // B案: ポジションがあれば need はポジション合計の自動計算。無い店では手動。
   const [manualNeed, setManualNeed] = useState(initial?.need_count ?? 0)
   const [needByPos, setNeedByPos] = useState<Record<string, number>>(
@@ -1416,7 +1434,7 @@ function RequirementRowEditor({
 
   const posSummary = Object.entries(needByPos)
     .filter(([, v]) => v > 0)
-    .map(([k, v]) => `${k}${v}`)
+    .map(([k, v]) => `${posNameOf(k)}${v}`)
     .join('・')
   const kindSummary = Object.entries(minByKind)
     .filter(([, v]) => v > 0)
@@ -1473,13 +1491,14 @@ function RequirementRowEditor({
       {hasPositions && (
         <div className="condrow pos-row">
           <span className="req-lab">ポジション別</span>
-          {positionNames.map((name) => (
-            <span key={name} className="mm pp">
-              {name}
+          {positions.map((p) => (
+            <span key={p.id} className="mm pp">
+              {p.color && <span className="pos-dot" style={{ background: p.color }} />}
+              {p.name}
               <Stepper
-                value={needByPos[name] ?? 0}
-                onChange={(v) => setNeedByPos({ ...needByPos, [name]: v })}
-                label={`${name}の必要人数`}
+                value={needByPos[p.id] ?? 0}
+                onChange={(v) => setNeedByPos({ ...needByPos, [p.id]: v })}
+                label={`${p.name}の必要人数`}
               />
             </span>
           ))}
@@ -1717,12 +1736,21 @@ function BuildView() {
 
   if (!me) return null
 
-  const positions = (posQ.data ?? []).filter((p) => p.store_id === null || p.store_id === storeId)
+  // 0024: 配置セレクト等は「有効」のみ（sort_order昇順）。名前解決は無効化済みも含む全件から
+  const allPositions = posQ.data ?? []
+  const positions = allPositions
+    .filter((p) => (p.store_id === null || p.store_id === storeId) && p.is_active)
+    .sort((a, b) => a.sort_order - b.sort_order)
   const posName = (id: string | null) =>
-    id ? (positions.find((p) => p.id === id)?.name ?? 'ポジション') : null
+    id ? (allPositions.find((p) => p.id === id)?.name ?? 'ポジション') : null
+  // 0024: need_by_position は id キー。旧・名前キー行もシムで id に正規化してから集計する
+  const reqRows = (reqQ.data ?? []).map((r) => ({
+    ...r,
+    need_by_position: normalizeNeedByPosition(r.need_by_position, allPositions, storeId),
+  }))
   // 充足度は現段では「通し」行のみ参照（帯別行が入っても挙動不変の後方互換ガード。帯別過不足は次段）
   const reqByType = new Map(
-    (reqQ.data ?? []).filter((r) => r.time_band_id === null).map((r) => [r.day_type, r]),
+    reqRows.filter((r) => r.time_band_id === null).map((r) => [r.day_type, r]),
   )
   const holidays = holidaysQ.data ?? new Map<string, string>()
 
@@ -1984,10 +2012,10 @@ function BuildView() {
           const weightOf = (a: ShiftAsg) => (a.weight_half ? 0.5 : 1)
           const total = dayAsgs.reduce((s, a) => s + weightOf(a), 0)
           const need = req?.need_count ?? 0
+          // 0024: position_id キーで集計（表示ラベルは posName で解決）
           const byPos = new Map<string, number>()
           for (const a of dayAsgs) {
-            const n = posName(a.position_id)
-            if (n) byPos.set(n, (byPos.get(n) ?? 0) + weightOf(a))
+            if (a.position_id) byPos.set(a.position_id, (byPos.get(a.position_id) ?? 0) + weightOf(a))
           }
           const dayCls = holiday || d.dow === 0 ? ' sun' : d.dow === 6 ? ' sat' : ''
 
@@ -2009,11 +2037,11 @@ function BuildView() {
               {/* 帯未定義の店: 現行の通し充足度チップ（後方互換・無変更） */}
               {bands.length === 0 && req && Object.keys(req.need_by_position).length > 0 && (
                 <div className="cov-rows">
-                  {Object.entries(req.need_by_position).map(([name, needN]) => {
-                    const got = byPos.get(name) ?? 0
+                  {Object.entries(req.need_by_position).map(([pid, needN]) => {
+                    const got = byPos.get(pid) ?? 0
                     return (
-                      <span key={name} className={`cov mono${got >= needN ? ' ok' : ' short'}`}>
-                        {name} {got}/{needN}
+                      <span key={pid} className={`cov mono${got >= needN ? ' ok' : ' short'}`}>
+                        {posName(pid)} {got}/{needN}
                       </span>
                     )
                   })}
@@ -2026,9 +2054,7 @@ function BuildView() {
                   {bands.map((b) => {
                     // 帯別要件 → 無ければ通し要件にフォールバック
                     const bandReq =
-                      (reqQ.data ?? []).find(
-                        (r) => r.day_type === dt && r.time_band_id === b.id,
-                      ) ?? null
+                      reqRows.find((r) => r.day_type === dt && r.time_band_id === b.id) ?? null
                     const effReq = bandReq ?? req
                     const needBy = effReq?.need_by_position ?? {}
                     // 重なり判定（簡易版・当日域）: 帯に触れる配置を数える。
@@ -2039,8 +2065,8 @@ function BuildView() {
                     )
                     const haveBy = new Map<string, number>()
                     for (const a of bandAsgs) {
-                      const n = posName(a.position_id)
-                      if (n) haveBy.set(n, (haveBy.get(n) ?? 0) + weightOf(a))
+                      if (a.position_id)
+                        haveBy.set(a.position_id, (haveBy.get(a.position_id) ?? 0) + weightOf(a))
                     }
                     const needEntries = Object.entries(needBy)
                     return (
@@ -2049,12 +2075,12 @@ function BuildView() {
                         {needEntries.length === 0 ? (
                           <span className="bc-unset">未設定</span>
                         ) : (
-                          needEntries.map(([name, needN]) => {
-                            const got = haveBy.get(name) ?? 0
+                          needEntries.map(([pid, needN]) => {
+                            const got = haveBy.get(pid) ?? 0
                             const cls = got < needN ? ' short' : got === needN ? ' ok' : ' over'
                             return (
-                              <span key={name} className={`cov mono${cls}`}>
-                                {name} {got}/{needN}
+                              <span key={pid} className={`cov mono${cls}`}>
+                                {posName(pid)} {got}/{needN}
                               </span>
                             )
                           })

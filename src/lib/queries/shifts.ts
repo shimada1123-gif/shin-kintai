@@ -251,6 +251,35 @@ export async function fetchRequirements(storeId: string): Promise<RequirementRow
   }))
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * 後方互換シム（0024）: need_by_position のキーを position_id に正規化する。
+ * - キーが uuid ならそのまま（正）
+ * - 名前キー（旧データ）なら tenant×store で解決: store_id is null or =storeId、
+ *   同名は店専用優先（store_id nulls last 相当）で1件目
+ * - 解決不能キーは落とす（表示は 0/未設定扱い・保存対象外）
+ * 書込は常に id キーのみ（このシムは読取専用の安全弁）。
+ */
+export function normalizeNeedByPosition(
+  need: Record<string, number>,
+  positions: { id: string; name: string; store_id: string | null }[],
+  storeId: string,
+): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const [k, v] of Object.entries(need)) {
+    if (UUID_RE.test(k)) {
+      out[k] = v
+      continue
+    }
+    const hit = positions
+      .filter((p) => p.name === k && (p.store_id === null || p.store_id === storeId))
+      .sort((a, b) => (a.store_id === null ? 1 : 0) - (b.store_id === null ? 1 : 0))[0]
+    if (hit) out[hit.id] = v
+  }
+  return out
+}
+
 /** 0以下・非数を除いて整数化（jsonb を汚さない） */
 function cleanCounts(src: Record<string, number>): Record<string, number> {
   const out: Record<string, number> = {}

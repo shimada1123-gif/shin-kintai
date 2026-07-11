@@ -4493,3 +4493,115 @@ h3,
 .wg-empty {
   color: var(--line);
 }
+
+/* ---------------- ポジション管理カード（0024 自由化） ---------------- */
+
+.posman-store {
+  margin-bottom: 8px;
+}
+
+.posman-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.posman-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 4px 2px;
+  border-bottom: 1px solid var(--line);
+}
+
+.posman-row.off .posman-name {
+  color: var(--muted, #8a939b);
+  text-decoration: line-through;
+}
+
+.posman-dot {
+  width: 14px;
+  height: 14px;
+  min-width: 14px;
+  border-radius: 50%;
+  border: 1px solid rgb(0 0 0 / 15%);
+  padding: 0;
+  cursor: pointer;
+}
+
+span.posman-dot {
+  cursor: default;
+}
+
+.posman-name {
+  font-weight: 600;
+}
+
+.posman-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--blue-soft, #e3edf5);
+  color: #2a5674;
+}
+
+.posman-badge.inactive {
+  background: var(--line);
+  color: #555;
+}
+
+.posman-ops {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.posman-rename {
+  flex: 1;
+  min-width: 100px;
+}
+
+.posman-palette {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0 2px 20px;
+}
+
+.posman-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  padding: 0;
+  cursor: pointer;
+}
+
+.posman-swatch.on {
+  border-color: var(--ink, #222);
+}
+
+.posman-add {
+  align-items: center;
+}
+
+.posman-common {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* 必要人数ステッパー横の色ドット */
+.pos-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 3px;
+  vertical-align: baseline;
+}
