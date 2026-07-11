@@ -105,6 +105,45 @@ function dowOf(date: string): number {
   return new Date(`${date}T00:00:00`).getDay()
 }
 
+/* ---------------------- C-1c: 保存前の衝突分割 ---------------------- */
+
+/** 衝突判定に必要な既存配置の最小形（ShiftAsg と構造互換・draft/published 両方を渡す） */
+export interface ExistingAsgLite {
+  staff_id: string
+  work_date: string
+  start_min: number
+  end_min: number
+}
+
+/**
+ * C-1c: 草案を「保存する行」と「既存配置と衝突するためスキップする行」に分割する純関数。
+ * 衝突 = 同一 staff ∧ 同一 date ∧ 時間重なり(a.start < b.end && a.end > b.start)。
+ * - 既存優先（(a)方式）: 衝突草案は skipped へ。既存行には一切触れない。
+ * - 同一 staff×date でも時間が重ならなければ保存対象（分割シフト正当）。接する（end==start）は重なりでない。
+ * - 決定的: toSave / skipped とも plan の元順序を保持。
+ */
+export function splitPlanByConflict(
+  planAssignments: AutoAssignment[],
+  existingAsgs: ExistingAsgLite[],
+): { toSave: AutoAssignment[]; skipped: AutoAssignment[] } {
+  const byStaffDate = new Map<string, ExistingAsgLite[]>()
+  for (const e of existingAsgs) {
+    const k = `${e.staff_id}|${e.work_date}`
+    const list = byStaffDate.get(k) ?? []
+    list.push(e)
+    byStaffDate.set(k, list)
+  }
+  const toSave: AutoAssignment[] = []
+  const skipped: AutoAssignment[] = []
+  for (const a of planAssignments) {
+    const hit = (byStaffDate.get(`${a.staffId}|${a.date}`) ?? []).some(
+      (e) => a.startMin < e.end_min && a.endMin > e.start_min,
+    )
+    ;(hit ? skipped : toSave).push(a)
+  }
+  return { toSave, skipped }
+}
+
 /* --------------------------- 候補判定（共有） --------------------------- */
 
 /**

@@ -523,6 +523,48 @@ export async function createAssignment(a: CreateAsgArgs): Promise<void> {
   if (error) throw error
 }
 
+/* ---------------- C-1c: 自動シフト草案の一括保存（draftのみ） ---------------- */
+
+export interface SaveDraftRow {
+  staffId: string
+  workDate: string
+  startMin: number
+  endMin: number
+  positionId: string | null
+}
+
+/**
+ * 草案（衝突分割後の toSave）を shift_assignments へ配列 insert（status='draft' 固定）。
+ * - .select() を付けない（RETURNING×RLS 回避の作法・0009/0011の教訓）
+ * - getSupabase()＝呼び出し者JWT。防壁は sa2_write（shift_edit ∧ 自店・行ごとに評価）
+ * - 1リクエスト=1トランザクション: 1行でも失敗すれば全行ロールバック（部分保存なし）
+ * - 既存行の update/delete は一切しない（insert のみ・既存優先スキップは呼び出し側で分割済み）
+ */
+export async function saveDraftPlan(a: {
+  tenantId: string
+  storeId: string
+  rows: SaveDraftRow[]
+}): Promise<void> {
+  if (a.rows.length === 0) return
+  for (const r of a.rows) validateAsgTimes(r.startMin, r.endMin)
+  const supabase = await getSupabase()
+  const { error } = await supabase.from('shift_assignments').insert(
+    a.rows.map((r) => ({
+      tenant_id: a.tenantId,
+      store_id: a.storeId,
+      staff_id: r.staffId,
+      work_date: r.workDate,
+      start_min: r.startMin,
+      end_min: r.endMin,
+      position_id: r.positionId,
+      weight_half: false,
+      status: 'draft' as const,
+      note: null,
+    })),
+  )
+  if (error) throw error
+}
+
 export interface UpdateAsgArgs {
   startMin: number | null
   endMin: number | null

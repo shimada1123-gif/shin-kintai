@@ -56,6 +56,7 @@ import {
   normalizeNeedByPosition,
   publishWeek,
   reqErrText,
+  saveDraftPlan,
   sendShiftNotifications,
   updateAssignment,
   upsertAvailability,
@@ -74,6 +75,7 @@ import { ymd } from '@/lib/worktime'
 import {
   buildAutoShift,
   createEligibility,
+  splitPlanByConflict,
   type AutoAssignment,
   type AutoNeed,
   type BuildAutoShiftInput,
@@ -1906,7 +1908,8 @@ function BuildView({ onGoDayoff }: { onGoDayoff?: () => void }) {
   const [pubMsg, setPubMsg] = useState<string | null>(null)
   const [pubErr, setPubErr] = useState<string | null>(null)
   const [autoMsg, setAutoMsg] = useState<string | null>(null)
-  // C-1b: 自動シフト草案（未保存プレビュー）。入力スナップショット＋草案配列。DBには一切書かない
+  const [autoErr, setAutoErr] = useState<string | null>(null)
+  // C-1b: 自動シフト草案（未保存プレビュー）。入力スナップショット＋草案配列。保存は明示操作(C-1c)のみ
   const [plan, setPlan] = useState<{
     input: BuildAutoShiftInput
     assignments: AutoAssignment[]
@@ -1939,7 +1942,36 @@ function BuildView({ onGoDayoff }: { onGoDayoff?: () => void }) {
   useEffect(() => {
     setPlan(null)
     setAutoMsg(null)
+    setAutoErr(null)
   }, [storeId, week.from])
+
+  // C-1c: 草案の一括保存（insertのみ・status='draft'・既存行は不変）
+  const saveMut = useMutation({
+    mutationFn: (v: { toSave: AutoAssignment[]; skippedCount: number }) =>
+      saveDraftPlan({
+        tenantId: me!.tenantId,
+        storeId,
+        rows: v.toSave.map((a) => ({
+          staffId: a.staffId,
+          workDate: a.date,
+          startMin: a.startMin,
+          endMin: a.endMin,
+          positionId: a.positionId,
+        })),
+      }),
+    onSuccess: (_r, v) => {
+      // 冪等化: 成功で草案を破棄＝同じ草案の再保存を物理的に不可に
+      setPlan(null)
+      setAutoMsg(
+        `草案を ${v.toSave.length} 件、下書きとして保存しました ✓` +
+          (v.skippedCount > 0 ? `（${v.skippedCount}件は既存の配置と重複のためスキップ）` : '') +
+          ' 確定・通知は従来のボタンから行ってください。',
+      )
+      void qc.invalidateQueries({ queryKey: ['shift_asg'] })
+      void qc.invalidateQueries({ queryKey: ['shift_notify_preview'] })
+    },
+    onError: (e) => setAutoErr(asgErrText(e)), // 失敗時は plan 保持＝再試行可
+  })
 
   const asgQ = useQuery({
     queryKey: ['shift_asg', storeId, week.from],
@@ -2163,7 +2195,32 @@ function BuildView({ onGoDayoff }: { onGoDayoff?: () => void }) {
       // openMin/closeMin: 店営業時間のマスタが無いため未指定＝エンジン側フォールバック(17:00-22:00)
     }
     setAutoMsg(null)
+    setAutoErr(null)
     setPlan({ input, assignments: buildAutoShift(input).assignments })
+  }
+
+  // C-1c: 保存ボタン。衝突分割 → confirm（N保存/Mスキップの明示）→ 一括insert
+  const onSavePlan = () => {
+    if (!plan) return
+    setAutoMsg(null)
+    setAutoErr(null)
+    const { toSave, skipped } = splitPlanByConflict(plan.assignments, asgQ.data ?? [])
+    if (toSave.length === 0) {
+      setAutoErr(
+        plan.assignments.length === 0
+          ? '保存する草案がありません。'
+          : '保存対象がありません（全件が既存の配置と時間が重なっています）。',
+      )
+      return
+    }
+    const msg =
+      `草案 ${toSave.length} 件を下書き（draft）として保存します。` +
+      (skipped.length > 0
+        ? `\n${skipped.length} 件は既存の配置と時間が重なるためスキップされます。`
+        : '') +
+      '\nよろしいですか？（確定・通知はされません）'
+    if (!confirm(msg)) return
+    saveMut.mutate({ toSave, skippedCount: skipped.length })
   }
 
   // 草案の派生値（不足・手動追加候補）。手修正のたびにここで再計算される
@@ -2351,21 +2408,29 @@ function BuildView({ onGoDayoff }: { onGoDayoff?: () => void }) {
             onClick={() => {
               setPlan(null)
               setAutoMsg(null)
+              setAutoErr(null)
             }}
           >
             クリア
           </button>
           <button
             className="btn sm pri"
-            onClick={() =>
-              // C-1c で shift_assignments(draft) への一括保存を実装。今回は保存経路なし
-              setAutoMsg('草案の保存は次の更新で有効化されます（C-1c）。')
-            }
+            disabled={saveMut.isPending}
+            onClick={onSavePlan}
           >
-            この草案を保存
+            {saveMut.isPending ? '保存中…' : 'この草案を保存'}
           </button>
-          {autoMsg && <span className="note">{autoMsg}</span>}
         </div>
+      )}
+      {autoMsg && (
+        <p className="board-info" role="status">
+          {autoMsg}
+        </p>
+      )}
+      {autoErr && (
+        <p className="login-error" role="alert">
+          {autoErr}
+        </p>
       )}
 
       {(draftPrevQ.data?.total_offers ?? 0) > 0 && (

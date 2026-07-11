@@ -6,6 +6,8 @@
 import assert from 'node:assert/strict'
 import {
   buildAutoShift,
+  splitPlanByConflict,
+  type AutoAssignment,
   type AutoAvail,
   type BuildAutoShiftInput,
 } from './auto-shift.ts'
@@ -365,6 +367,77 @@ t('週外の日付の needs は無視', () => {
     }),
   )
   assert.deepEqual(r, { assignments: [], unfilled: [] })
+})
+
+/* ---------------- C-1c: splitPlanByConflict ---------------- */
+
+const planAsg = (staff: string, date: string, s: number, e: number): AutoAssignment => ({
+  staffId: staff,
+  date,
+  bandId: null,
+  positionId: P1,
+  startMin: s,
+  endMin: e,
+  source: 'auto',
+})
+const exist = (staff: string, date: string, s: number, e: number) => ({
+  staff_id: staff,
+  work_date: date,
+  start_min: s,
+  end_min: e,
+})
+
+t('split: 既存draft相当と時間重なり → skipped（既存優先）', () => {
+  const r = splitPlanByConflict([planAsg('a', MON, 1020, 1320)], [exist('a', MON, 1200, 1439)])
+  assert.equal(r.toSave.length, 0)
+  assert.equal(r.skipped.length, 1)
+})
+
+t('split: 同staff同dateでも重ならない別時間帯 → toSave（分割シフト正当）', () => {
+  const r = splitPlanByConflict([planAsg('a', MON, 600, 900)], [exist('a', MON, 1020, 1320)])
+  assert.equal(r.toSave.length, 1)
+  assert.equal(r.skipped.length, 0)
+})
+
+t('split: 接する（end==start）は重なりでない → toSave', () => {
+  const r = splitPlanByConflict([planAsg('a', MON, 900, 1020)], [exist('a', MON, 1020, 1320)])
+  assert.equal(r.toSave.length, 1)
+})
+
+t('split: published相当の既存行とも衝突判定（status非依存）', () => {
+  // 関数は status を見ない＝draft/published どちらの行を渡しても同じ規則で弾く
+  const r = splitPlanByConflict([planAsg('a', MON, 1020, 1320)], [exist('a', MON, 1000, 1100)])
+  assert.equal(r.skipped.length, 1)
+})
+
+t('split: 別staff/別dateは衝突しない', () => {
+  const r = splitPlanByConflict(
+    [planAsg('a', MON, 1020, 1320), planAsg('b', MON, 1020, 1320), planAsg('a', TUE, 1020, 1320)],
+    [exist('a', MON, 1020, 1320)],
+  )
+  assert.equal(r.skipped.length, 1)
+  assert.deepEqual(r.toSave.map((x) => `${x.staffId}|${x.date}`), [`b|${MON}`, `a|${TUE}`])
+})
+
+t('split: 複数混在で元順序を保持（決定的）', () => {
+  const plan = [
+    planAsg('a', MON, 600, 700), // save
+    planAsg('a', MON, 1020, 1320), // skip
+    planAsg('b', MON, 600, 700), // save
+    planAsg('b', MON, 650, 800), // save（既存とは重ならない・plan内重複は対象外）
+  ]
+  const ex = [exist('a', MON, 1100, 1200)]
+  const r1 = splitPlanByConflict(plan, ex)
+  const r2 = splitPlanByConflict(plan, ex)
+  assert.deepEqual(r1, r2)
+  assert.deepEqual(r1.toSave.map((x) => x.startMin), [600, 600, 650])
+  assert.deepEqual(r1.skipped.map((x) => x.startMin), [1020])
+})
+
+t('split: 縮退（plan空/既存空）', () => {
+  assert.deepEqual(splitPlanByConflict([], [exist('a', MON, 0, 100)]), { toSave: [], skipped: [] })
+  const only = [planAsg('a', MON, 600, 700)]
+  assert.deepEqual(splitPlanByConflict(only, []).toSave, only)
 })
 
 console.log(`\n${passed} tests passed`)
