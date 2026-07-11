@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test:autoshift": "node src/lib/auto-shift.test.ts",
+    "test:labor": "node src/lib/labor-alerts.test.ts",
     "deploy": "npm run typecheck && npm run build && wrangler deploy",
     "types:gen": "npx supabase gen types typescript --linked > src/lib/database.types.ts"
   },

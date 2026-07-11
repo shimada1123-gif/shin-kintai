@@ -81,6 +81,7 @@ import {
   type AutoNeed,
   type BuildAutoShiftInput,
 } from '@/lib/auto-shift'
+import { laborAlerts, type LaborAlert } from '@/lib/labor-alerts'
 
 export const Route = createFileRoute('/_authed/shifts')({
   component: ShiftsPage,
@@ -622,6 +623,27 @@ function AvailEditorModal({
 /** 分→コンパクト時刻（毎正時は「17」、それ以外は「17:30」） */
 const compactTime = (m: number): string => (m % 60 === 0 ? String(m / 60) : minToHHMM(m))
 
+/** C-3: 労務アラートバッジ（warn=琥珀⚠N / info=淡色ℹN・title で内訳）。全ソフト＝表示のみ */
+function LaborBadges({ alerts }: { alerts?: LaborAlert[] }) {
+  if (!alerts || alerts.length === 0) return null
+  const warns = alerts.filter((a) => a.kind === 'warn')
+  const infos = alerts.filter((a) => a.kind === 'info')
+  return (
+    <>
+      {warns.length > 0 && (
+        <span className="labor-badge warn" title={warns.map((a) => a.detail).join(' / ')}>
+          ⚠{warns.length}
+        </span>
+      )}
+      {infos.length > 0 && (
+        <span className="labor-badge info" title={infos.map((a) => a.detail).join(' / ')}>
+          ℹ{infos.length}
+        </span>
+      )}
+    </>
+  )
+}
+
 function WeekGridView() {
   const { me } = useMe()
   const perms = usePermissions()
@@ -696,6 +718,19 @@ function WeekGridView() {
   // 区分色ドット: 社員=青 / パート=桃 / その他（アルバイト等）=グレー
   const dotCls = (r: RosterEntry) =>
     r.isRegular ? 'wg-dot-reg' : (r.kindLabel ?? '').includes('パート') ? 'wg-dot-part' : 'wg-dot-arb'
+
+  // C-3: 労務アラート（全ソフト・表示のみ）。手組み配置(draft+published)を判定
+  // 社保対象は暫定=非社員（employment_kinds に社保フラグ列が無いため。将来列が出来たら差し替え）
+  const laborByStaff = laborAlerts({
+    assignments: (asgQ.data ?? []).map((a) => ({
+      staffId: a.staff_id,
+      date: a.work_date,
+      startMin: a.start_min,
+      endMin: a.end_min,
+    })),
+    roster: (rosterQ.data ?? []).map((r) => ({ staffId: r.staffId, shakaiTarget: !r.isRegular })),
+    weekDays: week.days.map((d) => d.date),
+  }).byStaff
 
   // 週合計（配置の実働時間・h）
   const weekHours = (staffId: string): number => {
@@ -787,6 +822,7 @@ function WeekGridView() {
                   <td className="wg-name">
                     <i className={`wg-dot ${dotCls(r)}`} />
                     <b>{r.name}</b>
+                    <LaborBadges alerts={laborByStaff.get(r.staffId)} />
                   </td>
                   {week.days.map((d) => {
                     const k = `${r.staffId}|${d.date}`
@@ -2283,6 +2319,31 @@ function BuildView({ onGoDayoff }: { onGoDayoff?: () => void }) {
     }
   })()
 
+  // C-3: 草案段階の労務アラート（既存配置＋草案を合成して同じ純関数で判定・表示のみ）
+  const planLabor = plan
+    ? laborAlerts({
+        assignments: [
+          ...(asgQ.data ?? []).map((a) => ({
+            staffId: a.staff_id,
+            date: a.work_date,
+            startMin: a.start_min,
+            endMin: a.end_min,
+          })),
+          ...plan.assignments.map((a) => ({
+            staffId: a.staffId,
+            date: a.date,
+            startMin: a.startMin,
+            endMin: a.endMin,
+          })),
+        ],
+        roster: (rosterQ.data ?? []).map((r) => ({
+          staffId: r.staffId,
+          shakaiTarget: !r.isRegular, // 社保フラグ列が無いため暫定=非社員
+        })),
+        weekDays: week.days.map((d) => d.date),
+      }).byStaff
+    : null
+
   // 手修正（ローカルstateの草案配列のみ編集。DB非書込）
   const removePlanAsg = (idx: number) => {
     if (!plan) return
@@ -2376,6 +2437,8 @@ function BuildView({ onGoDayoff }: { onGoDayoff?: () => void }) {
             onClick={() => {
               setPubMsg(null)
               setPubErr(null)
+              // C-3結線点(将来): ハード違反で確定をブロックする場合はここで
+              // laborAlerts の warn を判定し、違反リスト表示＋mutate中止を差す（初版は全ソフト＝表示のみ）
               if (
                 confirm(
                   `この週のシフトを確定します。スタッフへの通知は別の「確定シフトを通知」から行います（この操作ではメールは送られません）。`,
@@ -2443,6 +2506,24 @@ function BuildView({ onGoDayoff }: { onGoDayoff?: () => void }) {
           <span className="mono plan-count">
             充足 {plan.assignments.length} / <span className={planDerived.lack > 0 ? 'plan-lack' : ''}>不足 {planDerived.lack}</span>
           </span>
+          {planLabor &&
+            (() => {
+              const items: string[] = []
+              let warnN = 0
+              for (const [sid, als] of planLabor) {
+                const w = als.filter((a) => a.kind === 'warn')
+                if (w.length > 0) {
+                  warnN += w.length
+                  items.push(`${nameOf.get(sid) ?? sid}: ${w.map((a) => a.detail).join('・')}`)
+                }
+              }
+              if (warnN === 0) return null
+              return (
+                <span className="labor-badge warn" title={items.join(' / ')}>
+                  ⚠ 労務 {warnN}件
+                </span>
+              )
+            })()}
           <button
             className="btn sm"
             onClick={() => {

@@ -4862,3 +4862,28 @@ span.posman-dot {
   color: var(--muted, #667);
   margin: 2px 0 4px;
 }
+
+/* ---------------- C-3 労務アラートバッジ（全ソフト・表示のみ） ---------------- */
+
+.labor-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  margin-left: 5px;
+  cursor: help;
+  white-space: nowrap;
+}
+
+.labor-badge.warn {
+  background: var(--gold-soft, #fbf3dc);
+  color: #8a5a00;
+  border: 1px solid var(--gold, #b8860b);
+}
+
+.labor-badge.info {
+  background: var(--line, #e9edf0);
+  color: #556;
+}
