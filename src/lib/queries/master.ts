@@ -17,17 +17,23 @@ export interface StaffWithDetails {
   id: string
   full_name: string
   status: string
+  /** 一時停止（0029・false=シフト候補から外れる。status とは別軸） */
+  is_active: boolean
+  /** 退職日（0029・null=在籍。日付=アーカイブ＝一覧の既定から消える） */
+  retired_at: string | null
   tags: string[]
   assignments: Assignment[]
 }
 
 /* ------------------------------- 取得 ------------------------------- */
 
+/** 希望マトリクスの行など。退職者は出さない（roster と同じ在籍のみ） */
 export async function fetchStaffList(): Promise<StaffWithDetails[]> {
   const supabase = await getSupabase()
   const { data, error } = await supabase
     .from('staff')
-    .select('id, full_name, status, staff_tags (tag), staff_assignments (*)')
+    .select('id, full_name, status, is_active, retired_at, staff_tags (tag), staff_assignments (*)')
+    .is('retired_at', null)
     .order('full_name')
   if (error) throw error
 
@@ -35,6 +41,8 @@ export async function fetchStaffList(): Promise<StaffWithDetails[]> {
     id: s.id,
     full_name: s.full_name,
     status: s.status,
+    is_active: s.is_active,
+    retired_at: s.retired_at,
     // staff_assignments は wage_individual_view を持たない役割には RLS で見えない
     tags: ((s.staff_tags ?? []) as { tag: string }[]).map((t) => t.tag),
     assignments: (s.staff_assignments ?? []) as Assignment[],
@@ -80,6 +88,8 @@ export interface StaffPage {
 export async function fetchStaffPage(opts: {
   search?: string
   limit: number
+  /** 退職者も含める（「退職者を表示」トグル。既定 false=在籍のみ） */
+  includeRetired?: boolean
 }): Promise<StaffPage> {
   const supabase = await getSupabase()
   const search = sanitizeSearch(opts.search)
@@ -97,9 +107,13 @@ export async function fetchStaffPage(opts: {
 
   let q = supabase
     .from('staff')
-    .select('id, full_name, status, staff_tags (tag), staff_assignments (*)', { count: 'exact' })
+    .select('id, full_name, status, is_active, retired_at, staff_tags (tag), staff_assignments (*)', {
+      count: 'exact',
+    })
     .order('created_at', { ascending: false })
     .limit(opts.limit)
+  // 一覧の既定は在籍のみ。名前/タグ検索時とトグルON時は退職者も含める（過去データを辿るため）
+  if (!opts.includeRetired && !search) q = q.is('retired_at', null)
   if (search) {
     const orParts = [`full_name.ilike.%${search}%`]
     if (tagStaffIds.length > 0) orParts.push(`id.in.(${tagStaffIds.join(',')})`)
@@ -112,10 +126,66 @@ export async function fetchStaffPage(opts: {
     id: s.id,
     full_name: s.full_name,
     status: s.status,
+    is_active: s.is_active,
+    retired_at: s.retired_at,
     tags: ((s.staff_tags ?? []) as { tag: string }[]).map((t) => t.tag),
     assignments: (s.staff_assignments ?? []) as Assignment[],
   }))
   return { rows, total: count ?? rows.length }
+}
+
+/* ---------- 退職アーカイブ / 一時停止 / 復職 / 履歴ゼロ削除（0029 RPC・呼び出し者JWT） ---------- */
+// service_role では叩かない（app_has_perm が auth.uid() ベース）。認可は staff_master_edit。
+
+/** 退職（アーカイブ）。retiredAt 未指定なら関数側で当日 */
+export async function retireStaff(a: {
+  tenantId: string
+  staffId: string
+  retiredAt?: string | null
+}): Promise<void> {
+  const supabase = await getSupabase()
+  // 生成型は p_retired_at を non-null で吐くが、SQL 側は null 許容（null=当日）
+  const { error } = await supabase.rpc('app_retire_staff', {
+    p_tenant_id: a.tenantId,
+    p_staff_id: a.staffId,
+    p_retired_at: (a.retiredAt ?? null) as string,
+  })
+  if (error) throw error
+}
+
+/** 復職（retired_at=null） */
+export async function reinstateStaff(a: { tenantId: string; staffId: string }): Promise<void> {
+  const supabase = await getSupabase()
+  const { error } = await supabase.rpc('app_reinstate_staff', {
+    p_tenant_id: a.tenantId,
+    p_staff_id: a.staffId,
+  })
+  if (error) throw error
+}
+
+/** 一時停止 / 再開（status とは別軸） */
+export async function setStaffActive(a: {
+  tenantId: string
+  staffId: string
+  active: boolean
+}): Promise<void> {
+  const supabase = await getSupabase()
+  const { error } = await supabase.rpc('app_set_staff_active', {
+    p_tenant_id: a.tenantId,
+    p_staff_id: a.staffId,
+    p_active: a.active,
+  })
+  if (error) throw error
+}
+
+/** 物理削除（誤登録の掃除）。履歴あり/ログイン紐付きは関数側ガードで例外 */
+export async function deleteStaff(a: { tenantId: string; staffId: string }): Promise<void> {
+  const supabase = await getSupabase()
+  const { error } = await supabase.rpc('app_delete_staff', {
+    p_tenant_id: a.tenantId,
+    p_staff_id: a.staffId,
+  })
+  if (error) throw error
 }
 
 export interface StorePage {

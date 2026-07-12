@@ -1154,7 +1154,9 @@ export type Database = {
           email: string | null
           full_name: string
           id: string
+          is_active: boolean
           phone: string | null
+          retired_at: string | null
           status: string
           tenant_id: string
           user_id: string | null
@@ -1164,7 +1166,9 @@ export type Database = {
           email?: string | null
           full_name: string
           id?: string
+          is_active?: boolean
           phone?: string | null
+          retired_at?: string | null
           status?: string
           tenant_id: string
           user_id?: string | null
@@ -1174,7 +1178,9 @@ export type Database = {
           email?: string | null
           full_name?: string
           id?: string
+          is_active?: boolean
           phone?: string | null
+          retired_at?: string | null
           status?: string
           tenant_id?: string
           user_id?: string | null
@@ -1518,6 +1524,10 @@ export type Database = {
       app_announcement_manage: { Args: { aid: string }; Returns: boolean }
       app_announcement_visible: { Args: { aid: string }; Returns: boolean }
       app_can_store: { Args: { sid: string }; Returns: boolean }
+      app_delete_staff: {
+        Args: { p_staff_id: string; p_tenant_id: string }
+        Returns: undefined
+      }
       app_has_perm: { Args: { perm: string; tid: string }; Returns: boolean }
       app_is_member: { Args: { tid: string }; Returns: boolean }
       app_labor_cost: {
@@ -1554,8 +1564,16 @@ export type Database = {
       app_offer_confirm: { Args: { p_recipient_id: string }; Returns: Json }
       app_offer_decline: { Args: { p_token: string }; Returns: Json }
       app_offer_expire_due: { Args: never; Returns: number }
+      app_reinstate_staff: {
+        Args: { p_staff_id: string; p_tenant_id: string }
+        Returns: undefined
+      }
       app_reorder_positions: {
         Args: { p_ids: string[]; p_tenant_id: string }
+        Returns: undefined
+      }
+      app_retire_staff: {
+        Args: { p_retired_at: string; p_staff_id: string; p_tenant_id: string }
         Returns: undefined
       }
       app_role: { Args: { tid: string }; Returns: string }
@@ -1577,6 +1595,10 @@ export type Database = {
           p_tenant_id: string
         }
         Returns: string
+      }
+      app_set_staff_active: {
+        Args: { p_active: boolean; p_staff_id: string; p_tenant_id: string }
+        Returns: undefined
       }
       app_staff_id: { Args: { tid: string }; Returns: string }
       app_staff_see_corr: { Args: { tid: string }; Returns: boolean }

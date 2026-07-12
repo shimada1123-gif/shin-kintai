@@ -4887,3 +4887,34 @@ span.posman-dot {
   background: var(--line, #e9edf0);
   color: #556;
 }
+
+/* ---------------- 退職アーカイブ / 一時停止（0029） ---------------- */
+
+.show-retired {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  margin-left: auto;
+}
+
+.staff-retired {
+  opacity: 0.62;
+}
+
+.b-retired {
+  background: var(--line, #e3e7ea);
+  color: #555;
+}
+
+.b-paused {
+  background: var(--gold-soft, #fbf3dc);
+  color: #8a5a00;
+}
+
+.staff-life-err {
+  display: block;
+  font-size: 11px;
+  margin-top: 3px;
+}

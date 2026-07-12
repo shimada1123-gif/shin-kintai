@@ -14,6 +14,7 @@ import {
   createStaff,
   createTimeBand,
   deleteEmploymentKind,
+  deleteStaff,
   deleteTimeBand,
   fetchEmploymentKinds,
   fetchPositions,
@@ -22,10 +23,13 @@ import {
   fetchStoresPage,
   fetchStoreSkills,
   fetchTimeBands,
+  reinstateStaff,
   reorderPositions,
+  retireStaff,
   saveStore,
   setPositionActive,
   setSkill,
+  setStaffActive,
   updateEmploymentKind,
   updateStoreClosedDows,
   upsertPosition,
@@ -62,12 +66,15 @@ function MasterPage() {
   const [editing, setEditing] = useState<StaffWithDetails | null>(null)
 
   // 一覧は検索 + 最新◯件（サーバー側 ilike / limit）。
+  // 0029: 既定は在籍のみ（retired_at is null）。トグルON or 名前/タグ検索時は退職者も含む
   const [staffSearch, setStaffSearch] = useState('')
   const [staffLimit, setStaffLimit] = useState(20)
+  const [showRetired, setShowRetired] = useState(false)
   const staffSearchD = useDebounced(staffSearch, 300)
   const staffQ = useQuery({
-    queryKey: ['master', 'staff', 'page', staffSearchD, staffLimit],
-    queryFn: () => fetchStaffPage({ search: staffSearchD, limit: staffLimit }),
+    queryKey: ['master', 'staff', 'page', staffSearchD, staffLimit, showRetired],
+    queryFn: () =>
+      fetchStaffPage({ search: staffSearchD, limit: staffLimit, includeRetired: showRetired }),
   })
 
   const [storeSearch, setStoreSearch] = useState('')
@@ -131,7 +138,22 @@ function MasterPage() {
                 {staffQ.data.rows.length} / {staffQ.data.total}
               </span>
             )}
+            <label className="show-retired">
+              <input
+                type="checkbox"
+                checked={showRetired}
+                onChange={(e) => {
+                  setShowRetired(e.target.checked)
+                  setStaffLimit(20)
+                }}
+              />
+              退職者を表示
+            </label>
           </div>
+          <p className="note">
+            一覧は<b>在籍者のみ</b>です（退職者はアーカイブ）。氏名・タグで<b>検索すると退職者もヒット</b>し、
+            過去のシフト・人件費はそのまま残ります。
+          </p>
 
           {staffQ.isPending && <p className="note">読み込み中…</p>}
           {staffQ.error && (
@@ -167,10 +189,16 @@ function MasterPage() {
                       .filter(Boolean)
                     const primary = s.assignments[0]
                     return (
-                      <tr key={s.id}>
+                      <tr key={s.id} className={s.retired_at ? 'staff-retired' : undefined}>
                         <td className="cell-main">
                           <b>{s.full_name}</b>
                           {s.status === 'inactive' && <span className="muted-tag">無効</span>}
+                          {s.retired_at && (
+                            <span className="badge b-retired">退職 {s.retired_at}</span>
+                          )}
+                          {!s.retired_at && !s.is_active && (
+                            <span className="badge b-paused">一時停止</span>
+                          )}
                         </td>
                         <td className="cell-chip">
                           {s.tags.length === 0 ? (
@@ -211,6 +239,9 @@ function MasterPage() {
                           >
                             編集
                           </button>
+                          {canEdit && (
+                            <StaffLifecycleActions tenantId={me.tenantId} staff={s} />
+                          )}
                         </td>
                       </tr>
                     )
@@ -291,6 +322,129 @@ function MasterPage() {
         />
       )}
     </section>
+  )
+}
+
+/* ---------------- 退職 / 一時停止 / 復職 / 削除（0029・行アクション） ---------------- */
+// roster(app_store_roster) が is_active/retired_at を既にフィルタ済み＝退職・一時停止にすれば
+// スキル表・自動シフト候補・オファー候補・公休・配置候補から自動で消える（下流に再フィルタは入れない）。
+
+function StaffLifecycleActions({
+  tenantId,
+  staff,
+}: {
+  tenantId: string
+  staff: StaffWithDetails
+}) {
+  const qc = useQueryClient()
+  const [error, setError] = useState<string | null>(null)
+
+  // 退職/復職/一時停止で roster の返す集合が変わる＝関連クエリを広く再取得
+  const invalidate = () => {
+    void qc.invalidateQueries({ queryKey: ['master', 'staff'] })
+    void qc.invalidateQueries({ queryKey: ['master', 'staff', 'page'] })
+    void qc.invalidateQueries({ queryKey: ['store_roster'] })
+    void qc.invalidateQueries({ queryKey: ['store_skills'] })
+  }
+  const retire = useMutation({
+    mutationFn: (retiredAt: string) => retireStaff({ tenantId, staffId: staff.id, retiredAt }),
+    onSuccess: invalidate,
+    onError: (e) => setError(errText(e, '退職処理に失敗しました')),
+  })
+  const reinstate = useMutation({
+    mutationFn: () => reinstateStaff({ tenantId, staffId: staff.id }),
+    onSuccess: invalidate,
+    onError: (e) => setError(errText(e, '復職に失敗しました')),
+  })
+  const setActive = useMutation({
+    mutationFn: (active: boolean) => setStaffActive({ tenantId, staffId: staff.id, active }),
+    onSuccess: invalidate,
+    onError: (e) => setError(errText(e, '一時停止/再開に失敗しました')),
+  })
+  // 履歴あり / ログイン紐付きは関数側ガードで例外 → その文言をそのまま表示（クライアントで履歴判定しない）
+  const del = useMutation({
+    mutationFn: () => deleteStaff({ tenantId, staffId: staff.id }),
+    onSuccess: invalidate,
+    onError: (e) => setError(errText(e, '削除できませんでした')),
+  })
+
+  const busy =
+    retire.isPending || reinstate.isPending || setActive.isPending || del.isPending
+
+  return (
+    <>
+      {staff.retired_at ? (
+        <button
+          className="btn sm"
+          disabled={busy}
+          onClick={() => {
+            setError(null)
+            reinstate.mutate()
+          }}
+        >
+          復職
+        </button>
+      ) : (
+        <>
+          <button
+            className="btn sm"
+            disabled={busy}
+            title={staff.is_active ? 'シフト候補から一時的に外します' : 'シフト候補に戻します'}
+            onClick={() => {
+              setError(null)
+              setActive.mutate(!staff.is_active)
+            }}
+          >
+            {staff.is_active ? '一時停止' : '再開'}
+          </button>
+          <button
+            className="btn sm danger"
+            disabled={busy}
+            onClick={() => {
+              setError(null)
+              const today = new Date()
+              const p = (n: number) => String(n).padStart(2, '0')
+              const def = `${today.getFullYear()}-${p(today.getMonth() + 1)}-${p(today.getDate())}`
+              const input = prompt(
+                `${staff.full_name} さんを退職にします（一覧・シフト候補から消えます。過去のシフト・人件費は残ります）。\n退職日を入力してください（YYYY-MM-DD）:`,
+                def,
+              )
+              if (input === null) return
+              const d = input.trim()
+              if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+                setError('退職日は YYYY-MM-DD の形式で入力してください。')
+                return
+              }
+              retire.mutate(d)
+            }}
+          >
+            退職
+          </button>
+        </>
+      )}
+      <button
+        className="btn sm danger"
+        disabled={busy}
+        title="誤登録の削除（履歴がある人・ログイン紐付きの人は削除できません）"
+        onClick={() => {
+          setError(null)
+          if (
+            confirm(
+              `${staff.full_name} さんを完全に削除します（誤登録の掃除用）。\n配置・打刻などの履歴がある人は削除できません（その場合は「退職」を使ってください）。\n続行しますか？`,
+            )
+          ) {
+            del.mutate()
+          }
+        }}
+      >
+        削除
+      </button>
+      {error && (
+        <span className="login-error staff-life-err" role="alert">
+          {error}
+        </span>
+      )}
+    </>
   )
 }
 
