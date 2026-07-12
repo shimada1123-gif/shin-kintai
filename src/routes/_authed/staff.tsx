@@ -39,6 +39,12 @@ import {
   type Store,
   type StoreSkillRow,
 } from '@/lib/queries/master'
+import {
+  mealPricingOf,
+  updateMealPricing,
+  MEAL_TYPES,
+  type MealPricing,
+} from '@/lib/queries/meals'
 import { fetchStoreRoster, hhmmToMin, minToLabel, type RosterEntry } from '@/lib/queries/shifts'
 
 export const Route = createFileRoute('/_authed/staff')({
@@ -309,6 +315,8 @@ function MasterPage() {
           />
 
           <TimeBandsCard tenantId={me.tenantId} stores={storesQ.data ?? []} canEdit={canEdit} />
+
+          <MealPricingCard stores={storesQ.data ?? []} canEdit={canEdit} />
         </div>
       </div>
 
@@ -1449,6 +1457,113 @@ function SkillsCard({
       <p className="note">
         ○＝そのポジションに入れる人。シフト作成のオファー候補・自動割付（今後）の判断に使います。
         「既定」はスタッフ登録時の既定ポジション（可否とは独立）。
+      </p>
+    </div>
+  )
+}
+
+/* ---------------- 賄いマスタ（stores.settings.meal_pricing・0030） ---------------- */
+// 単価は「記録時点の値を price_snapshot に焼く」運用。ここを後から変えても過去の賄い代は動かない。
+
+function MealPricingCard({ stores, canEdit }: { stores: Store[]; canEdit: boolean }) {
+  const qc = useQueryClient()
+  const [storeId, setStoreId] = useState('')
+  const [msg, setMsg] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!storeId && stores.length) setStoreId(stores[0].id)
+  }, [stores, storeId])
+
+  const store = stores.find((s) => s.id === storeId)
+  const saved = store ? mealPricingOf(store) : { free: false, breakfast: 0, lunch: 0, dinner: 0 }
+  const [draft, setDraft] = useState<MealPricing>(saved)
+
+  // 店を切り替えたら保存済みの値を読み直す
+  useEffect(() => {
+    if (store) setDraft(mealPricingOf(store))
+    setMsg(null)
+    setError(null)
+  }, [storeId, store])
+
+  const save = useMutation({
+    mutationFn: () => updateMealPricing(storeId, draft),
+    onSuccess: () => {
+      setMsg('保存しました ✓')
+      void qc.invalidateQueries({ queryKey: ['master', 'stores'] })
+    },
+    onError: (e) => setError(errText(e, '賄い設定の保存に失敗しました')),
+  })
+
+  return (
+    <div className="card">
+      <div className="card-title">賄い</div>
+      {error && (
+        <p className="login-error" role="alert">
+          {error}
+        </p>
+      )}
+
+      {stores.length > 1 && (
+        <label className="field posman-store">
+          <span>店舗</span>
+          <select value={storeId} onChange={(e) => setStoreId(e.target.value)}>
+            {stores.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
+      <label className="meal-free">
+        <input
+          type="checkbox"
+          checked={draft.free}
+          disabled={!canEdit}
+          onChange={(e) => setDraft({ ...draft, free: e.target.checked })}
+        />
+        賄いは無料（単価0円で記録）
+      </label>
+
+      <div className="meal-prices">
+        {MEAL_TYPES.map((m) => (
+          <label key={m.key} className="field meal-price">
+            <span>{m.label}（円）</span>
+            <input
+              type="number"
+              min={0}
+              step={10}
+              value={draft[m.key]}
+              disabled={!canEdit || draft.free}
+              onChange={(e) => {
+                const v = Number.parseInt(e.target.value, 10)
+                setDraft({ ...draft, [m.key]: Number.isFinite(v) && v > 0 ? v : 0 })
+              }}
+            />
+          </label>
+        ))}
+      </div>
+
+      {canEdit && (
+        <button
+          className="btn sm pri"
+          disabled={save.isPending || !storeId}
+          onClick={() => {
+            setMsg(null)
+            setError(null)
+            save.mutate()
+          }}
+        >
+          {save.isPending ? '保存中…' : '保存'}
+        </button>
+      )}
+      {msg && <span className="req-ok">{msg}</span>}
+
+      <p className="note">
+        単価は<b>記録した時点の値</b>が保存されます（あとで単価を変えても過去の賄い代は変わりません）。
+        記録はスタッフの自己申告と店長の代理入力の両方ができます。
       </p>
     </div>
   )

@@ -4918,3 +4918,145 @@ span.posman-dot {
   font-size: 11px;
   margin-top: 3px;
 }
+
+/* ---------------- 賄い（0030） ---------------- */
+
+.meal-free {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.meal-prices {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.meal-price {
+  max-width: 96px;
+}
+
+/* --- 本人の自己申告 --- */
+
+.meal-my-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+
+.meal-day {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+}
+
+.meal-day-date {
+  font-size: 12px;
+  min-width: 5.5em;
+}
+
+.meal-cell {
+  min-width: 42px;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.meal-cell.on {
+  background: var(--green-soft, #e2f0e6);
+  border-color: var(--green, #3f7f56);
+  color: var(--green, #3f7f56);
+  font-weight: 700;
+}
+
+/* --- 店長マトリクス --- */
+
+.meal-summary-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin: 8px 0;
+  font-size: 12px;
+}
+
+.meal-unreported {
+  color: var(--red, #b23a20);
+  font-weight: 700;
+}
+
+.meal-wrap {
+  overflow-x: auto;
+}
+
+.meal-table {
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.meal-table th,
+.meal-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 2px 4px;
+  white-space: nowrap;
+}
+
+.meal-th {
+  font-weight: 600;
+}
+
+.meal-td {
+  text-align: center;
+}
+
+.meal-nowork {
+  color: var(--line);
+}
+
+.meal-cells {
+  display: inline-flex;
+  gap: 1px;
+}
+
+.meal-mini {
+  width: 18px;
+  height: 20px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: transparent;
+  font-size: 9px;
+  cursor: pointer;
+  padding: 0;
+  color: var(--muted, #99a);
+}
+
+.meal-mini.on {
+  background: var(--green-soft, #e2f0e6);
+  color: var(--green, #3f7f56);
+  font-weight: 700;
+}
+
+/* 本人申告=実線の濃い枠 / 店長代理=点線枠 */
+.meal-mini.on.by-self {
+  border: 1.5px solid var(--green, #3f7f56);
+}
+
+.meal-mini.on.by-manager {
+  border: 1.5px dashed var(--green, #3f7f56);
+}

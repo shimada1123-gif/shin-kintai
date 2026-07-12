@@ -498,6 +498,70 @@ export type Database = {
         }
         Relationships: []
       }
+      meal_records: {
+        Row: {
+          created_at: string
+          entered_by: string
+          entered_by_user: string | null
+          id: string
+          meal_type: string
+          price_snapshot: number
+          staff_id: string
+          store_id: string
+          tenant_id: string
+          updated_at: string
+          work_date: string
+        }
+        Insert: {
+          created_at?: string
+          entered_by: string
+          entered_by_user?: string | null
+          id?: string
+          meal_type: string
+          price_snapshot?: number
+          staff_id: string
+          store_id: string
+          tenant_id: string
+          updated_at?: string
+          work_date: string
+        }
+        Update: {
+          created_at?: string
+          entered_by?: string
+          entered_by_user?: string | null
+          id?: string
+          meal_type?: string
+          price_snapshot?: number
+          staff_id?: string
+          store_id?: string
+          tenant_id?: string
+          updated_at?: string
+          work_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meal_records_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meal_records_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meal_records_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       memberships: {
         Row: {
           created_at: string
@@ -1541,6 +1605,14 @@ export type Database = {
           work_date: string
         }[]
       }
+      app_meal_summary: {
+        Args: { p_from: string; p_store_id: string; p_to: string }
+        Returns: {
+          meal_count: number
+          staff_id: string
+          total_yen: number
+        }[]
+      }
       app_my_offers: {
         Args: never
         Returns: {
@@ -1626,6 +1698,16 @@ export type Database = {
         }[]
       }
       app_tenant_test_mode: { Args: { tid: string }; Returns: boolean }
+      app_upsert_meal: {
+        Args: {
+          p_meal_type: string
+          p_present: boolean
+          p_staff_id: string
+          p_store_id: string
+          p_work_date: string
+        }
+        Returns: string
+      }
       app_upsert_position: {
         Args: {
           p_color: string

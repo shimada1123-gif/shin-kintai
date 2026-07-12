@@ -658,6 +658,8 @@ export interface MyShift {
   start_min: number
   end_min: number
   note: string | null
+  /** 賄いの自己申告（0030）に必要。記録は勤務した店に紐づく */
+  store_id: string
   store_name: string
   position_name: string | null
 }
@@ -671,7 +673,7 @@ export async function fetchMyShifts(
   const supabase = await getSupabase()
   const { data, error } = await supabase
     .from('shift_assignments')
-    .select('id, work_date, start_min, end_min, note, stores (name), positions (name)')
+    .select('id, work_date, start_min, end_min, note, store_id, stores (name), positions (name)')
     .eq('staff_id', staffId)
     .eq('status', 'published')
     .gte('work_date', fromDay)
@@ -685,6 +687,7 @@ export async function fetchMyShifts(
     start_min: r.start_min,
     end_min: r.end_min,
     note: r.note,
+    store_id: r.store_id,
     store_name: (r.stores as { name: string } | null)?.name ?? '所属店舗',
     position_name: (r.positions as { name: string } | null)?.name ?? null,
   }))

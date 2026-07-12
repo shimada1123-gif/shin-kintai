@@ -82,6 +82,14 @@ import {
   type BuildAutoShiftInput,
 } from '@/lib/auto-shift'
 import { laborAlerts, type LaborAlert } from '@/lib/labor-alerts'
+import {
+  fetchMealRecords,
+  fetchMealSummary,
+  fetchMyMealRecords,
+  upsertMeal,
+  MEAL_TYPES,
+  type MealType,
+} from '@/lib/queries/meals'
 
 export const Route = createFileRoute('/_authed/shifts')({
   component: ShiftsPage,
@@ -128,7 +136,7 @@ function ShiftsPage() {
   const canEdit = perms.has('shift_edit')
   const hasSelf = !!me?.staffId
   const [tab, setTab] = useState<
-    'grid' | 'matrix' | 'build' | 'req' | 'dayoff' | 'mine' | 'myshift'
+    'grid' | 'matrix' | 'build' | 'req' | 'dayoff' | 'meal' | 'mine' | 'myshift'
   >('mine')
 
   // 権限が確定したら初期タブを決める（管理者はマトリクスが主）
@@ -185,6 +193,9 @@ function ShiftsPage() {
           >
             公休
           </button>
+          <button className={`tab${tab === 'meal' ? ' on' : ''}`} onClick={() => setTab('meal')}>
+            賄い
+          </button>
           {hasSelf && (
             <>
               <button className={`tab${tab === 'mine' ? ' on' : ''}`} onClick={() => setTab('mine')}>
@@ -228,6 +239,8 @@ function ShiftsPage() {
         <RequirementsView />
       ) : tab === 'dayoff' && canEdit ? (
         <StaffDayOffView />
+      ) : tab === 'meal' && canEdit ? (
+        <MealAdminView />
       ) : tab === 'matrix' && canEdit ? (
         <MatrixView />
       ) : hasSelf ? (
@@ -3839,6 +3852,310 @@ function AsgEditorModal({
 
 /* ------------------------------ マイシフト（本人） ------------------------------ */
 
+/* ---------------- 賄い: 店長の代理入力・未申告可視化・月次集計（0030） ---------------- */
+// 行=その月に勤務のあるスタッフ、列=勤務日×朝昼晩。勤務日なのに記録が無い＝空セル＝未申告（統制）。
+// セルタップで代理入力（entered_by は サーバが 'manager' を付ける。クライアントからは送らない）。
+
+function MealAdminView() {
+  const { me } = useMe()
+  const qc = useQueryClient()
+  const [storeId, setStoreId] = useState('')
+  const [month, setMonth] = useState(() => {
+    const n = new Date()
+    return new Date(n.getFullYear(), n.getMonth(), 1)
+  })
+  const mm = useMemo(() => monthMeta(month), [month])
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!storeId && me?.stores.length) setStoreId(me.stores[0].id)
+  }, [me?.stores, storeId])
+
+  // 勤務日＝配置（draft+published。勤務日ガードと同じ基準＝status不問）
+  const asgQ = useQuery({
+    queryKey: ['shift_asg', storeId, 'meal', mm.from],
+    enabled: !!storeId,
+    queryFn: () => fetchAssignments(storeId, mm.from, mm.to),
+  })
+  const recQ = useQuery({
+    queryKey: ['meal_records', storeId, mm.from],
+    enabled: !!storeId,
+    queryFn: () => fetchMealRecords({ storeId, from: mm.from, to: mm.to }),
+  })
+  const sumQ = useQuery({
+    queryKey: ['meal_summary', storeId, mm.from],
+    enabled: !!storeId,
+    queryFn: () => fetchMealSummary({ storeId, from: mm.from, to: mm.to }),
+  })
+
+  const toggle = useMutation({
+    mutationFn: (a: { staffId: string; workDate: string; mealType: MealType; present: boolean }) =>
+      upsertMeal({ ...a, storeId }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['meal_records', storeId] })
+      void qc.invalidateQueries({ queryKey: ['meal_summary', storeId] })
+    },
+    onError: (e) => setError(errText(e, '賄いの記録に失敗しました')),
+  })
+
+  if (!me) return null
+
+  // スタッフ×勤務日（配置のある日だけがセル対象＝未申告の分母）
+  const workDays = new Map<string, Set<string>>() // staffId → dates
+  const nameOf = new Map<string, string>()
+  for (const a of asgQ.data ?? []) {
+    const set = workDays.get(a.staff_id) ?? new Set<string>()
+    set.add(a.work_date)
+    workDays.set(a.staff_id, set)
+    nameOf.set(a.staff_id, a.staff_name)
+  }
+  const recBy = new Map(
+    (recQ.data ?? []).map((r) => [`${r.staff_id}|${r.work_date}|${r.meal_type}`, r]),
+  )
+  const totalBy = new Map((sumQ.data ?? []).map((s) => [s.staff_id, s]))
+  const staffIds = [...workDays.keys()].sort((a, b) =>
+    (nameOf.get(a) ?? '').localeCompare(nameOf.get(b) ?? '', 'ja'),
+  )
+  const dates = [...new Set((asgQ.data ?? []).map((a) => a.work_date))].sort()
+
+  // 未申告 = 勤務日 × 3区分 のうち記録が無いマス（統制の可視化）
+  let unreported = 0
+  for (const sid of staffIds) {
+    for (const d of workDays.get(sid)!) {
+      for (const m of MEAL_TYPES) {
+        if (!recBy.has(`${sid}|${d}|${m.key}`)) unreported++
+      }
+    }
+  }
+  const monthTotal = (sumQ.data ?? []).reduce((s, r) => s + r.total_yen, 0)
+
+  return (
+    <>
+      <div className="filter-row">
+        <MonthNav month={month} label={mm.label} onChange={setMonth} />
+        <label className="field">
+          <span>店舗</span>
+          <select value={storeId} onChange={(e) => setStoreId(e.target.value)}>
+            {me.stores.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      {error && (
+        <p className="login-error" role="alert">
+          {error}
+        </p>
+      )}
+
+      <div className="meal-summary-bar">
+        <b>
+          今月の賄い代 <span className="mono">¥{monthTotal.toLocaleString('ja-JP')}</span>
+        </b>
+        <span className={`mono${unreported > 0 ? ' meal-unreported' : ''}`}>
+          未申告 {unreported} 件
+        </span>
+        <span className="note">勤務日 × 朝昼晩のうち、記録が無いマスの数です</span>
+      </div>
+
+      {(asgQ.isPending || recQ.isPending) && !!storeId && <p className="note">読み込み中…</p>}
+      {!asgQ.isPending && staffIds.length === 0 && (
+        <p className="note">この月の配置がありません（賄いは勤務日にのみ記録できます）。</p>
+      )}
+
+      {staffIds.length > 0 && (
+        <div className="table-wrap meal-wrap">
+          <table className="meal-table">
+            <thead>
+              <tr>
+                <th className="wg-name">スタッフ</th>
+                {dates.map((d) => (
+                  <th key={d} className="mono meal-th">
+                    {new Date(`${d}T00:00:00`).getDate()}
+                  </th>
+                ))}
+                <th className="wg-total">賄い代</th>
+              </tr>
+            </thead>
+            <tbody>
+              {staffIds.map((sid) => (
+                <tr key={sid}>
+                  <td className="wg-name">
+                    <b>{nameOf.get(sid)}</b>
+                  </td>
+                  {dates.map((d) => {
+                    const works = workDays.get(sid)!.has(d)
+                    return (
+                      <td key={d} className="meal-td">
+                        {!works ? (
+                          <span className="meal-nowork">—</span>
+                        ) : (
+                          <span className="meal-cells">
+                            {MEAL_TYPES.map((m) => {
+                              const rec = recBy.get(`${sid}|${d}|${m.key}`)
+                              const on = !!rec
+                              return (
+                                <button
+                                  key={m.key}
+                                  type="button"
+                                  className={`meal-mini${on ? ` on by-${rec.entered_by}` : ''}`}
+                                  disabled={toggle.isPending}
+                                  title={
+                                    on
+                                      ? `${m.label}：${rec.entered_by === 'self' ? '本人申告' : '店長入力'}（¥${rec.price_snapshot}）`
+                                      : `${m.label}：未申告（タップで代理入力）`
+                                  }
+                                  onClick={() => {
+                                    setError(null)
+                                    toggle.mutate({
+                                      staffId: sid,
+                                      workDate: d,
+                                      mealType: m.key,
+                                      present: !on,
+                                    })
+                                  }}
+                                >
+                                  {m.short}
+                                </button>
+                              )
+                            })}
+                          </span>
+                        )}
+                      </td>
+                    )
+                  })}
+                  <td className="wg-total mono">
+                    ¥{(totalBy.get(sid)?.total_yen ?? 0).toLocaleString('ja-JP')}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <p className="note">
+        濃い枠＝<b>本人の申告</b>、点線枠＝<b>店長の代理入力</b>。空きマスは未申告です（勤務日のみ表示）。
+        単価は記録時点の設定で焼き込まれ、あとで単価を変えても過去分は変わりません。
+      </p>
+    </>
+  )
+}
+
+/* ---------------- 賄い: 本人の自己申告（0030・マイシフト内） ---------------- */
+// 勤務日（自分の公開シフトがある日）にだけトグルを出す。勤務日ガードで弾かれる日は表示しない。
+// entered_by / price_snapshot はサーバが決める（クライアントから送らない）。
+
+function MyMealsSection({ staffId }: { staffId: string }) {
+  const qc = useQueryClient()
+  const [month, setMonth] = useState(() => {
+    const n = new Date()
+    return new Date(n.getFullYear(), n.getMonth(), 1)
+  })
+  const mm = useMemo(() => monthMeta(month), [month])
+  const [error, setError] = useState<string | null>(null)
+
+  // 勤務日＝自分の公開シフト（当月）
+  const shiftsQ = useQuery({
+    queryKey: ['my_shifts', staffId, 'meal', mm.from],
+    queryFn: () => fetchMyShifts(staffId, mm.from, mm.to),
+  })
+  const recQ = useQuery({
+    queryKey: ['my_meals', staffId, mm.from],
+    queryFn: () => fetchMyMealRecords({ staffId, from: mm.from, to: mm.to }),
+  })
+
+  // 日ごとに1行（同じ日に複数配置＝分割シフトでも賄いは日×区分で1件）
+  const days = useMemo(() => {
+    const m = new Map<string, string>() // date → store_id（その日の最初の配置の店）
+    for (const s of shiftsQ.data ?? []) if (!m.has(s.work_date)) m.set(s.work_date, s.store_id)
+    return [...m.entries()].map(([date, storeId]) => ({ date, storeId }))
+  }, [shiftsQ.data])
+
+  const recSet = new Set((recQ.data ?? []).map((r) => `${r.work_date}|${r.meal_type}`))
+  const myTotal = (recQ.data ?? []).reduce((s, r) => s + r.price_snapshot, 0)
+
+  const toggle = useMutation({
+    mutationFn: (a: { storeId: string; workDate: string; mealType: MealType; present: boolean }) =>
+      upsertMeal({ ...a, staffId }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['my_meals', staffId] })
+      void qc.invalidateQueries({ queryKey: ['meal_records'] })
+    },
+    onError: (e) => setError(errText(e, '賄いの記録に失敗しました')),
+  })
+
+  const dateLabel = (d: string) =>
+    new Date(`${d}T00:00:00`).toLocaleDateString('ja-JP', {
+      month: 'numeric',
+      day: 'numeric',
+      weekday: 'short',
+    })
+
+  return (
+    <>
+      <div className="sec-h">
+        <h3>賄い（自己申告）</h3>
+        <span className="rule" />
+        <MonthNav month={month} label={mm.label} onChange={setMonth} />
+      </div>
+
+      {error && (
+        <p className="login-error" role="alert">
+          {error}
+        </p>
+      )}
+
+      <div className="card meal-my">
+        <div className="meal-my-total">
+          <span>今月の賄い代</span>
+          <b className="mono">¥{myTotal.toLocaleString('ja-JP')}</b>
+        </div>
+        {(shiftsQ.isPending || recQ.isPending) && <p className="note">読み込み中…</p>}
+        {!shiftsQ.isPending && days.length === 0 && (
+          <p className="note">この月の公開シフトがありません（勤務日にのみ申告できます）。</p>
+        )}
+        {days.map((d) => (
+          <div key={d.date} className="meal-day">
+            <span className="mono meal-day-date">{dateLabel(d.date)}</span>
+            {MEAL_TYPES.map((m) => {
+              const on = recSet.has(`${d.date}|${m.key}`)
+              return (
+                <button
+                  key={m.key}
+                  type="button"
+                  className={`meal-cell${on ? ' on' : ''}`}
+                  disabled={toggle.isPending}
+                  aria-pressed={on}
+                  onClick={() => {
+                    setError(null)
+                    toggle.mutate({
+                      storeId: d.storeId,
+                      workDate: d.date,
+                      mealType: m.key,
+                      present: !on,
+                    })
+                  }}
+                >
+                  {m.label}
+                </button>
+              )
+            })}
+          </div>
+        ))}
+      </div>
+
+      <p className="note">
+        食べた区分をタップしてください（もう一度タップで取り消し）。単価は記録した時点の設定で計算され、
+        <b>賄い代は給与から差し引かれます</b>（実際の控除は給与計算で行います）。
+      </p>
+    </>
+  )
+}
+
 function MyShiftView() {
   const { me } = useMe()
   const staffId = me?.staffId
@@ -3981,6 +4298,8 @@ function MyShiftView() {
           {errText(myOffersQ.error, 'オファー状況を取得できませんでした')}
         </p>
       )}
+
+      <MyMealsSection staffId={staffId} />
 
       <p className="note">
         シフトの変更が必要なときは店舗の管理者に相談してください（マイシフトからは変更できません）。
